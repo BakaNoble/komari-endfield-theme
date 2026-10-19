@@ -20,7 +20,7 @@ async function walk(dir) {
   }
 }
 await walk('dist');
-for (const path of ['preview.png', 'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) {
+for (const path of ['preview.png', 'README.md', 'docs/assets/ai-generated.png', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) {
   files[path] = new Uint8Array(await readFile(path));
 }
 for (const dependency of ['react', 'react-dom', 'lucide-react']) {
