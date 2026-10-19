@@ -1,0 +1,82 @@
+name: Release theme
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - komari-theme.json
+      - .github/workflows/release.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-theme
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Resolve version
+        id: theme
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const { version } = JSON.parse(fs.readFileSync('komari-theme.json', 'utf8'));
+          if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Expected a stable semantic version.');
+          const tag = `v${version}`;
+          if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== tag) {
+            throw new Error('Tag must match komari-theme.json version.');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\ntag=${tag}\n`);
+          NODE
+      - run: npm ci
+      - run: npm test
+      - run: npm run package
+      - name: Publish installable theme
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          THEME_VERSION: ${{ steps.theme.outputs.version }}
+          RELEASE_TAG: ${{ steps.theme.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --json url --jq .url; then
+            echo "::notice::Release already exists; update the theme version to publish a new package."
+            exit 0
+          fi
+          if tag_commit=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha 2>/dev/null); then
+            if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+              echo "::error::Existing tag points to a different commit; release was not published."
+              exit 1
+            fi
+          fi
+          cat > release-notes.md <<EOF
+          下载 **komari-endfield-$THEME_VERSION.zip**，在 Komari 后台的主题管理中上传并应用。
+
+          - 支持深浅主题、强调色、紧凑列表和节点详情。
+          - 圆环支持鼠标跟随偏转，可选择“仅组件”或“整个页面”。
+          - 附带 SHA-256 校验文件。
+
+          请使用上面的主题 ZIP；GitHub 自动生成的 Source code 压缩包不包含构建产物，无法直接安装。
+          EOF
+          gh release create "$RELEASE_TAG" \
+            "release/komari-endfield-$THEME_VERSION.zip" \
+            "release/komari-endfield-$THEME_VERSION.zip.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "Endfield v$THEME_VERSION" \
+            --notes-file release-notes.md \
+            --latest

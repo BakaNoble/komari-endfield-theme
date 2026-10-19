@@ -8,7 +8,7 @@
 
 ## 安装
 
-1. 下载或构建 `release/komari-endfield-1.0.4.zip`。
+1. 在 [GitHub Releases](https://github.com/BakaNoble/komari-endfield-theme/releases/latest) 下载 `komari-endfield-1.0.4.zip`，或按下文在本地构建。
 2. 在 Komari 管理后台的主题管理中上传此 ZIP，应用 **Endfield / 终末地**。
 3. 在主题的 **Endfield 外观设置** 中配置概览标题、强调色、默认深浅主题、列表密度、更新间隔和提醒阈值。
 
@@ -43,6 +43,14 @@ npm run package
 ```
 
 主题标识固定为 `Endfield`，构建资源路径为 `/themes/Endfield/dist/`。如更改标识，同时修改 `komari-theme.json` 与 `vite.config.ts` 中的路径。
+
+## 打包与发布
+
+本地执行 `npm ci` 和 `npm run package`，会在 `release/` 生成可安装的主题 ZIP 和 `.zip.sha256` 校验文件。`release/` 已被 Git 忽略；GitHub 的 Releases 是独立的版本发布页面，需要上传附件，不会自动显示本地同名目录里的文件。
+
+仓库包含 **Release theme** 工作流：版本升级时，同步修改 `komari-theme.json`、`package.json` 和 `package-lock.json` 中的版本并推送到 `main`，即可自动测试、构建、校验并发布 `v版本号`，将 ZIP 和校验文件附加到 Releases。推送匹配的 `v*` 标签也可触发发布；标签必须与主题版本一致。
+
+也可在仓库 **Actions → Release theme → Run workflow** 中手动运行。首次添加工作流时会自动发布当前版本；已有版本不会被覆盖，后续发布请先升级版本号。整个流程使用 GitHub 自动提供的仓库令牌，无需额外配置个人 Token。
 
 ## API 与兼容范围
 
