@@ -8,7 +8,7 @@
 
 ## 安装
 
-1. 在 [GitHub Releases](https://github.com/BakaNoble/komari-endfield-theme/releases/latest) 下载 `komari-endfield-1.0.4.zip`，或按下文在本地构建。
+1. 在 [GitHub Releases](https://github.com/BakaNoble/komari-endfield-theme/releases/latest) 下载 `komari-endfield-1.0.5.zip`，或按下文在本地构建。
 2. 在 Komari 管理后台的主题管理中上传此 ZIP，应用 **Endfield / 终末地**。
 3. 在主题的 **Endfield 外观设置** 中配置概览标题、强调色、默认深浅主题、列表密度、更新间隔和提醒阈值。
 
@@ -52,6 +52,8 @@ npm run package
 
 也可在仓库 **Actions → Release theme → Run workflow** 中手动运行。首次添加工作流时会自动发布当前版本；已有版本不会被覆盖，后续发布请先升级版本号。整个流程使用 GitHub 自动提供的仓库令牌，无需额外配置个人 Token。
 
+主题清单的 `url` 固定为本项目 GitHub 仓库地址。Komari 后台点击主题“更新”时，会从这个仓库的最新 Release 下载主题包；安装 1.0.5 后，后续更新可以沿用该地址。已安装的 1.0.4 缺少此字段，需要先手动上传一次 1.0.5，或在后台更新对话框填写本仓库地址。发布流程先上传主题 ZIP，再附加校验文件，以兼容服务端选取首个 Release 附件的逻辑。
+
 ## API 与兼容范围
 
 优先使用公开 JSON-RPC：`common:getNodes`、`common:getNodesLatestStatus`、`common:getRecords`；站点配置读取 `/api/public`。方法不可用时兼容 `/api/nodes`、`/api/clients` WebSocket 和 `/api/records/load`。鉴权失败不会切换成演示数据。
@@ -65,6 +67,8 @@ npm run package
 1.0.3 为中间状态环加入鼠标跟随的 3D 偏转。外圈、标题、数字与底部标签按不同深度响应；鼠标移出、窗口失焦或滚动后复位。只在支持鼠标悬停的设备启用，触屏和系统减少动态效果时保持静止。使用逐帧合并更新与 CSS transform，不触发监控数据组件的额外渲染。
 
 1.0.4 增加“动效响应范围”：默认“仅组件”，也可选择“整个页面”。访客在外观设置中切换；管理员可通过主题的 `tilt_scope` 设置默认值。整个页面模式根据完整视口内的鼠标位置计算偏转，仅组件模式沿用圆环自身的响应区域。恢复默认设置会同时清除本机对响应范围的覆盖。
+
+1.0.5 补全主题清单的 GitHub 仓库 `url`，供 Komari 后台更新功能获取最新 Release，并保证主题 ZIP 是首个上传的附件。
 
 网络趋势图展示本次会话收到的下载速率样本；示例模式使用标注的示例记录。离线节点的当前资源与速率显示为 `—`，累计流量与最后上报时间可以保留。历史曲线取服务器已有记录；缺失值不补零。
 

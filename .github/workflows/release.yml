@@ -69,14 +69,15 @@ jobs:
 
           - 支持深浅主题、强调色、紧凑列表和节点详情。
           - 圆环支持鼠标跟随偏转，可选择“仅组件”或“整个页面”。
+          - 主题清单包含 GitHub 仓库地址，可从 Komari 后台获取最新版本。
           - 附带 SHA-256 校验文件。
 
           请使用上面的主题 ZIP；GitHub 自动生成的 Source code 压缩包不包含构建产物，无法直接安装。
           EOF
           gh release create "$RELEASE_TAG" \
             "release/komari-endfield-$THEME_VERSION.zip" \
-            "release/komari-endfield-$THEME_VERSION.zip.sha256" \
             --target "$GITHUB_SHA" \
             --title "Endfield v$THEME_VERSION" \
             --notes-file release-notes.md \
             --latest
+          gh release upload "$RELEASE_TAG" "release/komari-endfield-$THEME_VERSION.zip.sha256"

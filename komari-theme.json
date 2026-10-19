@@ -2,8 +2,9 @@
   "name": "Endfield / 终末地",
   "short": "Endfield",
   "description": "灰白纸面、亮黄强调色与机械交互，为 Komari 打造的终末地风格监控主题。",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "author": "Endfield Theme",
+  "url": "https://github.com/BakaNoble/komari-endfield-theme",
   "preview": "preview.png",
   "configuration": {
     "type": "managed",
