@@ -1,0 +1,23 @@
+{
+  "name": "Endfield / 终末地",
+  "short": "Endfield",
+  "description": "灰白纸面、亮黄强调色与机械交互，为 Komari 打造的终末地风格监控主题。",
+  "version": "1.0.4",
+  "author": "Endfield Theme",
+  "preview": "preview.png",
+  "configuration": {
+    "type": "managed",
+    "name": "Endfield 外观设置",
+    "data": [
+      { "name": "内容与外观", "type": "title" },
+      { "key": "headline", "name": "概览标题", "type": "string", "default": "节点总览" },
+      { "key": "accent", "name": "强调色", "type": "select", "options": "yellow,ice,amber,lime", "default": "yellow" },
+      { "key": "default_theme", "name": "默认主题", "type": "select", "options": "light,dark,system", "default": "light" },
+      { "key": "density", "name": "列表密度", "type": "select", "options": "standard,compact", "default": "standard" },
+      { "key": "tilt_scope", "name": "动效响应范围", "type": "select", "options": "仅组件,整个页面", "default": "仅组件" },
+      { "name": "监控设置", "type": "title" },
+      { "key": "refresh_interval", "name": "更新间隔（秒）", "type": "number", "default": 2 },
+      { "key": "warning_threshold", "name": "资源提醒阈值（%）", "type": "number", "default": 85 }
+    ]
+  }
+}
