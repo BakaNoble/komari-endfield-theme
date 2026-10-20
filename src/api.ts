@@ -1,5 +1,6 @@
 import { normalizeHistory, normalizeNodes, normalizeStatuses } from './model.ts';
 import type { PublicInfo } from './model';
+import { normalizePingTasks, normalizePingReport, normalizePingMetrics } from './ping.ts';
 
 export class ApiError extends Error {
   code: number;
@@ -7,7 +8,8 @@ export class ApiError extends Error {
 }
 const unsupported = (e: unknown) => e instanceof ApiError && [404, 405, -32601, -32050].includes(e.code);
 async function request(path: string, options: RequestInit = {}) {
-  const response = await fetch(path, { credentials: 'same-origin', ...options, signal: AbortSignal.timeout(10000) });
+  const timeout = AbortSignal.timeout(10000);
+  const response = await fetch(path, { credentials: 'same-origin', ...options, signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout });
   if (!response.ok) throw new ApiError(response.status === 401 || response.status === 403 ? '此站点需要登录后查看。' : `请求失败（HTTP ${response.status}），请重试。`, response.status);
   let body;
   try { body = await response.json(); } catch { throw new ApiError('接口没有返回 JSON，请检查 Komari 服务地址。', 502); }
@@ -16,8 +18,8 @@ async function request(path: string, options: RequestInit = {}) {
   return body;
 }
 let id = 0;
-export async function rpc(method: string, params = {}) {
-  const body = await request('/api/rpc2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }) });
+export async function rpc(method: string, params = {}, signal?: AbortSignal) {
+  const body = await request('/api/rpc2', { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }) });
   if (!Object.hasOwn(body, 'result')) throw new ApiError('RPC 接口返回了无效的数据。', 502);
   return body.result;
 }
@@ -32,6 +34,42 @@ export async function history(uuid: string, hours: number) {
     if (!unsupported(e)) throw e;
     return normalizeHistory((await request(`/api/records/load?uuid=${encodeURIComponent(uuid)}&hours=${hours}&load_type=all`)).data);
   }
+}
+export async function pingTasks(signal?: AbortSignal) {
+  try { return normalizePingTasks(await rpc('public:getPublicPingTasks', {}, signal)); }
+  catch (e) { if (!unsupported(e)) throw e; return normalizePingTasks((await request('/api/task/ping', { signal })).data); }
+}
+let pingMetricsSupported = true;
+export async function pingReport(taskId: number, hours: number, signal?: AbortSignal) {
+  const metrics = async () => {
+    if (!pingMetricsSupported) return [];
+    try { return normalizePingMetrics(await rpc('public:getPingMetricStats', { task_id: taskId, hours }, signal)); }
+    catch (e) { if (unsupported(e)) pingMetricsSupported = false; return []; }
+  };
+  const records = async () => {
+    try { return normalizePingReport(await rpc('common:getRecords', { type: 'ping', task_id: taskId, hours, maxCount: 4000 }, signal)); }
+    catch (e) {
+      if (!unsupported(e)) throw e;
+      return normalizePingReport((await request(`/api/records/ping?task_id=${taskId}&hours=${hours}`, { signal })).data);
+    }
+  };
+  const [report, stats] = await Promise.all([records(), metrics()]);
+  return { ...report, metrics: stats };
+}
+// Bound concurrency by test target, independent of the number of hosts.
+export async function pingReports(taskIds: number[], hours: number, signal?: AbortSignal) {
+  const ids = [...new Set(taskIds)], reports: Record<number, Awaited<ReturnType<typeof pingReport>>> = {}, errors: Record<number, string> = {};
+  let next = 0;
+  const worker = async () => {
+    while (next < ids.length && !signal?.aborted) {
+      const id = ids[next++];
+      try { reports[id] = await pingReport(id, hours, signal); }
+      catch (e) { if (!signal?.aborted) errors[id] = e instanceof Error ? e.message : '无法读取延迟记录。'; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(3, ids.length) }, worker));
+  if (signal?.aborted) throw signal.reason;
+  return { reports, errors };
 }
 // One persistent compatibility socket; only used when the RPC method is unavailable.
 export class LiveSource {

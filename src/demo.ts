@@ -1,5 +1,19 @@
 import type { HistoryRecord, NodeInfo, NodeStatus } from './model';
+import type { PingReport, PingTask } from './ping';
 const GiB = 1024 ** 3;
+export const demoPingTasks: PingTask[] = [
+  { id: 1, name: 'Cloudflare DNS', type: 'ICMP', interval: 60, clients: [1, 2, 3, 4, 5, 6].map(i => `demo-node-${i}`), weight: 0 },
+  { id: 2, name: 'Google DNS', type: 'ICMP', interval: 60, clients: [1, 2, 3, 4, 5].map(i => `demo-node-${i}`), weight: 1 },
+  { id: 3, name: 'HTTPS 连通性', type: 'HTTP', interval: 60, clients: [1, 2, 3, 4, 5].map(i => `demo-node-${i}`), weight: 2 },
+];
+export function demoPingReport(task: number, hours: number): PingReport {
+  const records = demoPingTasks.find(t => t.id === task)!.clients.flatMap(uuid => {
+    const i = Number(uuid.split('-').at(-1)) - 1, base = [22, 37, 65, 12, 145, 180][i] + (task - 1) * 8;
+    return Array.from({ length: 60 }, (_, t) => ({ client: uuid, task_id: task, time: new Date(Date.now() - (59 - t) * hours * 60000 - (i === 5 ? 7200000 : 0)).toISOString(),
+      value: i === 2 && t % 13 === 0 ? -1 : Math.max(0, base + Math.sin(t * .24 + i) * (i === 2 ? 21 : 4) + Math.cos(t * .8) * 2) }));
+  });
+  return { records: records.filter(r => Date.parse(r.time) >= Date.now() - hours * 3600000).sort((a, b) => Date.parse(a.time) - Date.parse(b.time)), metrics: [], losses: {} };
+}
 const samples = [
   ['香港 / HKG-01', 'HK', '亚洲', 'AMD EPYC 7B13', 4, 8, 80, 24.8, 42.6, 36.2, 2.36, 8.42, 42],
   ['东京 / NRT-01', 'JP', '亚洲', 'Intel Xeon Platinum 8358', 4, 8, 100, 12.3, 31.4, 22.8, 0.84, 3.65, 128],
@@ -13,6 +27,7 @@ export const demoNodes: NodeInfo[] = samples.map((v, i) => ({
   mem_total: v[5] * GiB, disk_total: v[6] * GiB, swap_total: GiB,
   os: i % 2 ? 'Debian 12' : 'Ubuntu 24.04', arch: 'x86_64', virtualization: 'KVM',
   tags: i < 3 ? '生产环境;SSD' : '边缘节点;SSD', traffic_limit: 2 * 1024 ** 4,
+  expired_at: i === 3 ? undefined : new Date(Date.now() + [30, 5, -2, 0, 90, 14][i] * 86400000).toISOString(),
   traffic_limit_type: 'sum', weight: i,
 }));
 export function demoStatuses(tick = 0): Record<string, NodeStatus> {

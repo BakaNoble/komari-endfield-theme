@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nodes, history, LiveSource, ApiError } from '../src/api.ts';
+import { nodes, history, pingTasks, pingReport, pingReports, LiveSource, ApiError } from '../src/api.ts';
 const originalFetch = globalThis.fetch;
 const respond = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -46,4 +46,61 @@ test('legacy live socket sends get, normalizes the response and is reused', asyn
   const source = new LiveSource();
   try { assert.equal((await source.read()).a.cpu, 12); assert.equal((await source.read()).a.online, true); assert.equal(sockets, 1); assert.equal(requests, 2); }
   finally { source.close(); globalThis.fetch = originalFetch; globalThis.WebSocket = originalSocket; (globalThis as any).window = originalWindow; delete (globalThis as any).location; }
+});
+
+test('ping reads the selected task and window in two shared requests, with authoritative metric statistics', async () => {
+  const methods: string[] = [], controller = new AbortController();
+  globalThis.fetch = (async (_path, options) => {
+    const body = JSON.parse(String(options?.body)); methods.push(body.method);
+    assert.equal(body.params.task_id, 7); assert.equal(body.params.hours, 6); assert.ok(options?.signal);
+    return body.method === 'common:getRecords' ? respond({ result: { records: [{ client: 'a', task_id: 7, time: '2026-10-20T00:00:00Z', value: -1 }] } }) : respond({ result: { stats: [{ entity_id: 'a', task_id: '7', total: 12, loss: 25, avg: 4 }] } });
+  }) as typeof fetch;
+  try { const result = await pingReport(7, 6, controller.signal); assert.equal(result.records[0].value, -1); assert.equal(result.metrics[0].loss, 25); assert.deepEqual(methods.sort(), ['common:getRecords', 'public:getPingMetricStats']); }
+  finally { globalThis.fetch = originalFetch; }
+});
+test('multiple ping targets share bounded requests and one failing target does not erase successful targets', async () => {
+  const seen: number[] = []; let active = 0, peak = 0;
+  globalThis.fetch = (async (_path, options) => {
+    const body = JSON.parse(String(options?.body)), task = body.params.task_id;
+    active++; peak = Math.max(peak, active);
+    await new Promise(resolve => setTimeout(resolve, 3)); active--;
+    if (body.method === 'common:getRecords') seen.push(task);
+    if (task === 2) return respond({ error: { code: -32051, message: 'target unavailable' } });
+    return body.method === 'common:getRecords' ? respond({ result: { records: [{ client: 'a', task_id: task, time: '2026-10-20T00:00:00Z', value: task * 10 }] } }) : respond({ result: { stats: [] } });
+  }) as typeof fetch;
+  try {
+    const result = await pingReports([1, 2, 3, 4, 4], 1);
+    assert.deepEqual(seen.sort(), [1, 2, 3, 4]); assert.ok(peak <= 6);
+    assert.deepEqual(Object.keys(result.reports).sort(), ['1', '3', '4']); assert.match(result.errors[2], /unavailable/);
+    assert.equal(result.reports[3].records[0].task_id, 3); assert.equal(result.reports[3].records[0].value, 30);
+  } finally { globalThis.fetch = originalFetch; }
+});
+test('aborting a multi-target load cancels outstanding reads without starting more targets', async () => {
+  const controller = new AbortController(); let calls = 0;
+  globalThis.fetch = (async (_path, options) => { calls++; return new Promise((_resolve, reject) => options!.signal!.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })); }) as typeof fetch;
+  try {
+    const pending = pingReports([1, 2, 3, 4, 5], 1, controller.signal); controller.abort(new Error('cancelled by navigation'));
+    await assert.rejects(pending, /cancelled/); assert.ok(calls <= 6);
+  } finally { globalThis.fetch = originalFetch; }
+});
+test('ping task and history fall back to documented REST routes only for unsupported methods', async () => {
+  const paths: string[] = [];
+  globalThis.fetch = (async path => {
+    paths.push(String(path));
+    if (String(path) === '/api/rpc2') return respond({ error: { code: -32601, message: 'unsupported' } });
+    return String(path) === '/api/task/ping' ? respond({ data: [{ id: 3, clients: ['a'] }] }) : respond({ data: { records: [] } });
+  }) as typeof fetch;
+  try { assert.equal((await pingTasks())[0].id, 3); assert.deepEqual((await pingReport(3, 1)).records, []); assert.ok(paths.includes('/api/task/ping')); assert.ok(paths.includes('/api/records/ping?task_id=3&hours=1')); }
+  finally { globalThis.fetch = originalFetch; }
+});
+test('ping authorization errors and malformed records remain errors instead of being replaced by demo or fallback data', async () => {
+  const paths: string[] = [];
+  globalThis.fetch = (async path => { paths.push(String(path)); return respond({ error: { code: -32040, message: 'login required' } }); }) as typeof fetch;
+  try {
+    await assert.rejects(pingTasks(), (e: unknown) => e instanceof ApiError && e.code === -32040);
+    await assert.rejects(pingReport(1, 1), (e: unknown) => e instanceof ApiError && e.code === -32040);
+    assert.ok(paths.every(p => p === '/api/rpc2'));
+    globalThis.fetch = (async () => respond({ result: { records: null } })) as typeof fetch;
+    await assert.rejects(pingReport(1, 1), /格式/);
+  } finally { globalThis.fetch = originalFetch; }
 });

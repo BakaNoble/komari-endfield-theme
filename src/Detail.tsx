@@ -4,9 +4,13 @@ import { history } from './api';
 import { demoHistory } from './demo';
 import { bytes, duration, percent, traffic, warning, type HistoryRecord, type NodeInfo, type NodeStatus } from './model';
 import { Chart, Eyebrow, Meter, Modal, StateBadge } from './components';
+import { expiryInfo } from './expiry';
+import { HostPingDetails } from './NetworkDiagnostics';
+import type { usePingMonitor } from './usePingMonitor';
 
-export default function Detail({ node, status, onClose, demo, threshold, stale }: {
+export default function Detail({ node, status, onClose, demo, threshold, stale, ping }: {
   node: NodeInfo | null; status: NodeStatus | undefined; onClose: () => void; demo: boolean; threshold: number; stale: boolean;
+  ping?: ReturnType<typeof usePingMonitor>;
 }) {
   const [hours, setHours] = useState(6);
   const [records, setRecords] = useState<HistoryRecord[]>([]);
@@ -24,6 +28,7 @@ export default function Detail({ node, status, onClose, demo, threshold, stale }
     return () => { stopped = true; };
   }, [node?.uuid, hours, demo, revision]);
   const s = status; const active = s?.online;
+  const expiry = expiryInfo(node?.expired_at);
   const metrics = node ? [
     { icon: Cpu, label: 'CPU', value: active ? s.cpu : null, help: `${node.cpu_cores} 核心 / ${node.arch || '未知架构'}` },
     { icon: MemoryStick, label: '内存', value: active ? percent(s.ram, node.mem_total) : null, help: `${bytes(s?.ram)} / ${bytes(node.mem_total)}` },
@@ -34,6 +39,7 @@ export default function Detail({ node, status, onClose, demo, threshold, stale }
       <div className="detail-title"><Eyebrow>{node.region || 'NODE'} / {node.group}</Eyebrow><h2>{node.name}</h2><StateBadge status={s} alert={warning(node, s, threshold)} /></div>
       {stale && <p className="inline-notice">数据未更新</p>}
       <div className="detail-specs"><span>{node.os || '系统信息未提供'}</span><span>{node.cpu_name || '处理器信息未提供'}</span><span>{node.virtualization || '未知虚拟化'}</span></div>
+      {ping && <HostPingDetails node={node} status={s} monitor={ping} />}
       <div className="detail-metrics">{metrics.map(m => <section key={m.label}>
         <div><m.icon size={16} /><span>{m.label}</span></div><strong>{m.value == null ? '—' : m.value.toFixed(1)}<small>{m.value != null && '%'}</small></strong><Meter value={m.value} threshold={threshold} /><p>{m.help}</p>
       </section>)}</div>
@@ -52,7 +58,7 @@ export default function Detail({ node, status, onClose, demo, threshold, stale }
       </section>
       <section className="detail-network"><div className="section-heading"><div><Eyebrow>NETWORK</Eyebrow><h3>网络与流量</h3></div><Network size={20} /></div>
         <div className="network-pair"><div><span><ArrowUp size={14} />上传速率</span><strong>{bytes(active ? s.up : null, true)}</strong></div><div><span><ArrowDown size={14} />下载速率</span><strong>{bytes(active ? s.down : null, true)}</strong></div></div>
-        <dl className="detail-facts"><div><dt>累计上传</dt><dd>{bytes(s?.totalUp)}</dd></div><div><dt>累计下载</dt><dd>{bytes(s?.totalDown)}</dd></div><div><dt>流量额度</dt><dd>{node.traffic_limit ? `${bytes(traffic(node, s))} / ${bytes(node.traffic_limit)}` : '未设置'}</dd></div><div><dt>持续运行</dt><dd>{active ? duration(s.uptime) : '—'}</dd></div><div><dt>TCP / UDP 连接</dt><dd>{active ? `${s.tcp ?? '—'} / ${s.udp ?? '—'}` : '—'}</dd></div><div><dt>最后上报</dt><dd>{s?.time && Number.isFinite(Date.parse(s.time)) ? new Date(s.time).toLocaleString('zh-CN', { hour12: false }) : '—'}</dd></div></dl>
+        <dl className="detail-facts"><div><dt>累计上传</dt><dd>{bytes(s?.totalUp)}</dd></div><div><dt>累计下载</dt><dd>{bytes(s?.totalDown)}</dd></div><div><dt>流量额度</dt><dd>{node.traffic_limit ? `${bytes(traffic(node, s))} / ${bytes(node.traffic_limit)}` : '未设置'}</dd></div><div><dt>持续运行</dt><dd>{active ? duration(s.uptime) : '—'}</dd></div><div><dt>TCP / UDP 连接</dt><dd>{active ? `${s.tcp ?? '—'} / ${s.udp ?? '—'}` : '—'}</dd></div><div><dt>最后上报</dt><dd>{s?.time && Number.isFinite(Date.parse(s.time)) ? new Date(s.time).toLocaleString('zh-CN', { hour12: false }) : '—'}</dd></div>{expiry && <div><dt>到期时间</dt><dd title={expiry.full}>{expiry.date} / {expiry.label}</dd></div>}</dl>
       </section>
       {node.tags && <div className="detail-tags">{node.tags.split(/[;,]/).filter(Boolean).map((tag, i) => <span key={`${tag}-${i}`}>{tag}</span>)}</div>}
       {node.public_remark && <p className="public-remark">{node.public_remark}</p>}
