@@ -1,6 +1,6 @@
 # Komari Endfield Theme
 
-终末地风格的 Komari 监控主题。
+终末地风格的 Komari 监控主题：黑白工业面板、分层状态环与亮黄交互。
 
 <p align="center">
   <img src="docs/assets/ai-generated.png" width="300" alt="本项目 100% AI 生成，无人工掺杂">

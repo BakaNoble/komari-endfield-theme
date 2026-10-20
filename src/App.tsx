@@ -59,7 +59,7 @@ export default function App() {
     html.dataset.theme = dark ? 'dark' : 'light';
     html.dataset.efAccent = ['yellow', 'lime', 'ice', 'amber'].includes(accent) ? accent : 'yellow';
     html.dataset.efDensity = compact ? 'compact' : 'standard';
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#191919' : '#f4f4f2');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#161917' : '#e8e9e5');
   }, [dark, accent, compact]);
   useEffect(() => {
     if (!updated) return;
@@ -140,7 +140,7 @@ export default function App() {
             const s = statuses[n.uuid]; const active = s?.online; const alert = warning(n, s, threshold);
             const usedTraffic = traffic(n, s);
             const quotaText = percent(usedTraffic, n.traffic_limit, false)?.toFixed(1) ?? '—';
-            return <button key={n.uuid} className={`node-row ${s && !active ? 'node-offline' : ''}`} onClick={() => openNode(n)} aria-label={`查看 ${n.name} 详情`}>
+            return <button key={n.uuid} className={`node-row ${s && !active ? 'node-offline' : ''} ${alert ? 'node-attention' : ''}`} onClick={() => openNode(n)} aria-label={`查看 ${n.name} 详情`}>
               <span className="node-identity"><span className="node-index">{String(nodes.indexOf(n) + 1).padStart(2, '0')}</span><span className="region-code">{n.region || '—'}</span><span className="node-name"><span className="node-name-line"><strong>{n.name}</strong><StateBadge status={s} alert={alert} /></span><span className="node-spec">{n.os || '未知系统'}<i>/</i>{n.cpu_cores}C<i>/</i>{bytes(n.mem_total)}<i>/</i>{n.group}</span></span></span>
               {page === 'network' ? <><span className="traffic-cell"><span className="mobile-label">上传速率</span>{bytes(active ? s.up : null, true)}</span><span className="traffic-cell"><span className="mobile-label">下载速率</span>{bytes(active ? s.down : null, true)}</span><span className="traffic-cell"><span className="mobile-label">累计上传</span>{bytes(s?.totalUp)}</span><span className="traffic-cell quota-cell"><span className="mobile-label">累计下载</span><span>{bytes(s?.totalDown)}</span>{!!n.traffic_limit && <><small>额度已用 {quotaText}%</small><Meter value={percent(usedTraffic, n.traffic_limit)} threshold={threshold} /></>}</span></> : <><Resource label="CPU" value={active ? s.cpu : null} threshold={threshold} /><Resource label="内存" value={active ? percent(s.ram, n.mem_total) : null} threshold={threshold} /><Resource label="磁盘" value={active ? percent(s.disk, n.disk_total) : null} threshold={threshold} /><span className="row-network"><NetworkValue value={active ? s.up : null} direction="up" /><NetworkValue value={active ? s.down : null} direction="down" /></span><span className="row-uptime">{active ? duration(s.uptime) : '—'}</span></>}
               <ChevronRight className="row-arrow" size={18} aria-hidden="true" />
@@ -149,7 +149,7 @@ export default function App() {
         </div>
         <div className="list-footer"><span>显示 {visible.length} / {nodes.length} 个节点</span>{(statusFilter !== 'all' || query || effectiveGroup !== 'all') && <button className="text-button" onClick={clearFilters}>清除筛选<X size={12} /></button>}</div>
       </section>
-      <footer className="site-footer"><div className="footer-brand"><Logo /><strong>{siteName}</strong><span>服务器监控</span></div><div><span>Endfield Theme / v{themeManifest.version}</span><a href="https://komari-document.pages.dev" target="_blank" rel="noreferrer" aria-label="打开 Komari 文档"><CircleHelp size={14} />文档</a></div></footer>
+      <footer className="site-footer"><div className="footer-brand"><Logo /><strong>{siteName}</strong><span>Powered by Komari Monitor.</span></div><div><span>Endfield Theme / v{themeManifest.version}</span><a href="https://komari-document.pages.dev" target="_blank" rel="noreferrer" aria-label="打开 Komari 文档"><CircleHelp size={14} />文档</a></div></footer>
     </main>
     <Detail node={selected} status={selected ? statuses[selected.uuid] : undefined} onClose={closeNode} demo={isDemo} threshold={threshold} stale={stale} />
     <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} title="APPEARANCE / 外观设置">

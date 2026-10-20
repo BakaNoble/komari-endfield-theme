@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, X } from 'lucide-react';
 import { bytes, percent, warning, type NodeInfo, type NodeStatus } from './model';
 import { usePointerTilt, type TiltScope } from './usePointerTilt';
@@ -28,7 +28,11 @@ export function StatusRing({ nodes, statuses, threshold, scope = 'component' }: 
     <div className="ring-scene">
     <svg viewBox="0 0 240 240" aria-hidden="true">
       <defs><pattern id="offline-hatch" patternUnits="userSpaceOnUse" width="5" height="5"><path d="M-1 1L1-1M0 5L5 0M4 6L6 4" stroke="currentColor" strokeWidth="1" /></pattern></defs>
-      <circle cx="120" cy="120" r="111" fill="none" className="ring-fine" />
+      <circle cx="120" cy="120" r="108" fill="none" className="ring-rail" />
+      <circle cx="120" cy="120" r="116" fill="none" className="ring-fine" strokeDasharray="96 12 24 12" />
+      <g className="ring-ticks">{Array.from({ length: 48 }, (_, i) => <path key={i} d={`M120 ${i % 4 === 0 ? 10 : 13}v${i % 4 === 0 ? 7 : 3}`} transform={`rotate(${i * 7.5} 120 120)`} />)}</g>
+      <circle cx="120" cy="120" r="74" fill="none" className="ring-inner" />
+      <circle cx="120" cy="120" r="68" fill="none" className="ring-fine" strokeDasharray="72 36" transform="rotate(12 120 120)" />
       {nodes.length ? nodes.map((n, i) => {
         const s = statuses[n.uuid];
         return <circle key={n.uuid} cx="120" cy="120" r={r} fill="none" strokeWidth="15"
@@ -37,6 +41,7 @@ export function StatusRing({ nodes, statuses, threshold, scope = 'component' }: 
           transform={`rotate(${i * 360 / nodes.length - 90} 120 120)`} />;
       }) : <circle cx="120" cy="120" r={r} fill="none" strokeWidth="15" className="ring-segment unknown" />}
       <path d="M120 4v9m0 214v9M4 120h9m214 0h9" className="ring-fine" />
+      <path d="M117 17l3-5 3 5zm6 206-3 5-3-5z" className="ring-index" />
     </svg>
     <div className="ring-label"><span className="eyebrow">ONLINE NODES</span><div><strong>{known ? String(online).padStart(2, '0') : '—'}</strong><span>/{String(nodes.length).padStart(2, '0')}</span></div><span className="ring-caption">在线节点</span></div>
     </div>
@@ -45,6 +50,7 @@ export function StatusRing({ nodes, statuses, threshold, scope = 'component' }: 
 export function Chart({ values, times, format = v => `${v.toFixed(0)}%`, max, label, compact = false }: {
   values: (number | null)[]; times?: string[]; format?: (v: number) => string; max?: number; label: string; compact?: boolean;
 }) {
+  const fillId = `chart-fill-${useId().replaceAll(':', '')}`;
   const valid = values.filter((v): v is number => v != null && Number.isFinite(v));
   const width = 600, height = compact ? 80 : 165;
   const ceiling = max ?? Math.max(1, ...valid) * 1.15;
@@ -56,7 +62,9 @@ export function Chart({ values, times, format = v => `${v.toFixed(0)}%`, max, la
     {!compact && <div className="chart-scale"><span>{format(ceiling)}</span><span>{format(ceiling / 2)}</span><span>{format(0)}</span></div>}
     <div className="chart-plot">
       {valid.length >= 2 ? <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
+        <defs><pattern id={fillId} width="10" height="10" patternUnits="userSpaceOnUse"><path d="M1 0v10" stroke="currentColor" strokeWidth="1" opacity=".12" /></pattern></defs>
         {[.25, .5, .75, 1].map(y => <line key={y} x1="0" x2={width} y1={y * (height - 10)} y2={y * (height - 10)} className="chart-grid" />)}
+        {segments.filter(s => s.length > 1).map((s, i) => <g key={`fill-${i}`} className="chart-area"><polygon points={`${s[0].split(',')[0]},${height} ${s.join(' ')} ${s[s.length - 1].split(',')[0]},${height}`} /><polygon points={`${s[0].split(',')[0]},${height} ${s.join(' ')} ${s[s.length - 1].split(',')[0]},${height}`} fill={`url(#${fillId})`} /></g>)}
         {segments.filter(s => s.length > 1).map((s, i) => <polyline key={i} points={s.join(' ')} className="chart-line" />)}
       </svg> : <span className="chart-empty">{compact ? '等待采样' : '暂无记录'}</span>}
       {!compact && times && times.length > 1 && <div className="chart-times"><span>{time(times[0])}</span><span>{time(times[Math.floor(times.length / 2)])}</span><span>{time(times[times.length - 1])}</span></div>}
