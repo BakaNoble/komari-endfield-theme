@@ -7,6 +7,8 @@ import Detail from './Detail';
 import { demoHistory } from './demo';
 import themeManifest from '../komari-theme.json';
 import type { TiltScope } from './usePointerTilt';
+import { RegionBadge } from './RegionBadge';
+import { regionCode } from './region';
 
 type Page = 'overview' | 'nodes' | 'network';
 function readStorage(key: string) { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } }
@@ -82,7 +84,7 @@ export default function App() {
   const visible = useMemo(() => {
     const filtered = nodes.filter(n => {
       const s = statuses[n.uuid];
-      const matches = `${n.name} ${n.region} ${n.group} ${n.os} ${n.tags ?? ''}`.toLowerCase().includes(query.toLowerCase().trim());
+      const matches = `${n.name} ${n.region} ${regionCode(n.region) ?? ''} ${n.group} ${n.os} ${n.tags ?? ''}`.toLowerCase().includes(query.toLowerCase().trim());
       return matches && (effectiveGroup === 'all' || n.group === effectiveGroup) && (statusFilter === 'all' || statusFilter === 'online' && s?.online || statusFilter === 'offline' && s && !s.online || statusFilter === 'attention' && (s && !s.online || warning(n, s, threshold)));
     });
     return filtered.sort((a, b) => {
@@ -141,7 +143,7 @@ export default function App() {
             const usedTraffic = traffic(n, s);
             const quotaText = percent(usedTraffic, n.traffic_limit, false)?.toFixed(1) ?? '—';
             return <button key={n.uuid} className={`node-row ${s && !active ? 'node-offline' : ''} ${alert ? 'node-attention' : ''}`} onClick={() => openNode(n)} aria-label={`查看 ${n.name} 详情`}>
-              <span className="node-identity"><span className="node-index">{String(nodes.indexOf(n) + 1).padStart(2, '0')}</span><span className="region-code">{n.region || '—'}</span><span className="node-name"><span className="node-name-line"><strong>{n.name}</strong><StateBadge status={s} alert={alert} /></span><span className="node-spec">{n.os || '未知系统'}<i>/</i>{n.cpu_cores}C<i>/</i>{bytes(n.mem_total)}<i>/</i>{n.group}</span></span></span>
+              <span className="node-identity"><span className="node-index">{String(nodes.indexOf(n) + 1).padStart(2, '0')}</span><RegionBadge region={n.region} /><span className="node-name"><span className="node-name-line"><strong>{n.name}</strong><StateBadge status={s} alert={alert} /></span><span className="node-spec">{n.os || '未知系统'}<i>/</i>{n.cpu_cores}C<i>/</i>{bytes(n.mem_total)}<i>/</i>{n.group}</span></span></span>
               {page === 'network' ? <><span className="traffic-cell"><span className="mobile-label">上传速率</span>{bytes(active ? s.up : null, true)}</span><span className="traffic-cell"><span className="mobile-label">下载速率</span>{bytes(active ? s.down : null, true)}</span><span className="traffic-cell"><span className="mobile-label">累计上传</span>{bytes(s?.totalUp)}</span><span className="traffic-cell quota-cell"><span className="mobile-label">累计下载</span><span>{bytes(s?.totalDown)}</span>{!!n.traffic_limit && <><small>额度已用 {quotaText}%</small><Meter value={percent(usedTraffic, n.traffic_limit)} threshold={threshold} /></>}</span></> : <><Resource label="CPU" value={active ? s.cpu : null} threshold={threshold} /><Resource label="内存" value={active ? percent(s.ram, n.mem_total) : null} threshold={threshold} /><Resource label="磁盘" value={active ? percent(s.disk, n.disk_total) : null} threshold={threshold} /><span className="row-network"><NetworkValue value={active ? s.up : null} direction="up" /><NetworkValue value={active ? s.down : null} direction="down" /></span><span className="row-uptime">{active ? duration(s.uptime) : '—'}</span></>}
               <ChevronRight className="row-arrow" size={18} aria-hidden="true" />
             </button>;

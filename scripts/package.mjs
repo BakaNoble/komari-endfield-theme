@@ -23,7 +23,7 @@ await walk('dist');
 for (const path of ['preview.png', 'README.md', 'docs/assets/ai-generated.png', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) {
   files[path] = new Uint8Array(await readFile(path));
 }
-for (const dependency of ['react', 'react-dom', 'lucide-react']) {
+for (const dependency of ['react', 'react-dom', 'lucide-react', 'flag-icons']) {
   files[`licenses/${dependency}-LICENSE`] = new Uint8Array(await readFile(`node_modules/${dependency}/LICENSE`));
 }
 const output = `release/komari-endfield-${manifest.version}.zip`;

@@ -298,6 +298,8 @@ body::after {
   font-weight: 700;
 }
 .node-name-line { gap: 8px; flex-wrap: wrap; }
+.region-code img { display: block; width: calc(100% - 6px); height: auto; aspect-ratio: 4 / 3; object-fit: contain; }
+.region-text { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .node-name-line > strong { font-size: 14px; font-weight: 700; max-width: 100%; }
 .node-spec { font-size: 9px; margin-top: 6px; gap: 7px; color: #bdc7b5; }
 .node-spec > i { color: #728068; }
