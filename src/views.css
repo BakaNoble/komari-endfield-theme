@@ -35,7 +35,7 @@
 .globe-online small { font-size: 14px; color: var(--console-muted); font-weight: 500; margin-left: 3px; }
 .globe-workspace { display: block; padding: 0; }
 .globe-instrument { position: relative; min-width: 0; }
-.globe-stage { height: clamp(480px, 52vw, 780px); position: relative; background: none; }
+.globe-stage { height: clamp(480px, 52vw, 780px); position: relative; overflow: hidden; background: none; }
 .globe-stage canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
 .globe-stage canvas:active { cursor: grabbing; }
 .globe-stage canvas:focus-visible { outline-offset: -3px; }

@@ -45,8 +45,10 @@ export function createGlobe(canvas: HTMLCanvasElement, land: number[][], callbac
     }
     // Only the planet is drawn here; no separate viewport or instrument frame.
     context.fillStyle = water; context.strokeStyle = muted; context.lineWidth = .8;
-    context.beginPath(); context.arc(cx, cy, Math.min(aperture, radius), 0, Math.PI * 2); context.fill(); context.stroke();
-    context.save(); context.beginPath(); context.arc(cx, cy, aperture, 0, Math.PI * 2); context.clip();
+    // The silhouette belongs to the scaled sphere. The canvas rectangle is the
+    // viewport; the original unzoomed circle must never act as a fixed window.
+    context.beginPath(); context.arc(cx, cy, radius, 0, Math.PI * 2); context.fill(); context.stroke();
+    context.save(); context.beginPath(); context.arc(cx, cy, radius, 0, Math.PI * 2); context.clip();
     context.strokeStyle = grid; context.lineWidth = .65;
     const gridLine = (points: Coordinates[]) => {
       context.beginPath(); let pen = false;
@@ -72,7 +74,7 @@ export function createGlobe(canvas: HTMLCanvasElement, land: number[][], callbac
     const labels: { x: number; y: number }[] = [];
     for (const region of model.regions) {
       const point = project(...region.coordinates);
-      if (point.z <= .03 || Math.hypot(point.x - cx, point.y - cy) > Math.min(aperture, radius) - 4) continue;
+      if (point.z <= .03 || Math.hypot(point.x - cx, point.y - cy) > radius - 4 || point.x < 4 || point.x > w - 4 || point.y < 4 || point.y > h - 4) continue;
       markers.push({ x: point.x, y: point.y, code: region.code });
       const selected = model.selected === region.code;
       if (selected) {
@@ -87,9 +89,9 @@ export function createGlobe(canvas: HTMLCanvasElement, land: number[][], callbac
       context.beginPath(); context.moveTo(point.x, point.y - size); context.lineTo(point.x + size, point.y); context.lineTo(point.x, point.y + size); context.lineTo(point.x - size, point.y); context.closePath(); context.fill(); context.stroke(); context.setLineDash([]);
       const side = point.x < cx ? -1 : 1, labelWidth = 43, labelHeight = 15;
       const x = Math.max(4, Math.min(w - labelWidth - 4, point.x + side * 15 - (side < 0 ? labelWidth : 0)));
-      let y = Math.max(cy - aperture + 3, Math.min(cy + aperture - labelHeight - 3, point.y - 19));
+      let y = Math.max(4, Math.min(h - labelHeight - 30, point.y - 19));
       for (let attempt = 0; attempt < 5 && labels.some(label => Math.abs(label.x - x) < labelWidth + 2 && Math.abs(label.y - y) < labelHeight + 3); attempt++) y += labelHeight + 4;
-      y = Math.min(h - labelHeight - 30, y); labels.push({ x, y });
+      y = Math.max(4, Math.min(h - labelHeight - 30, y)); labels.push({ x, y });
       context.strokeStyle = selected ? ink : muted; context.lineWidth = .7;
       context.beginPath(); context.moveTo(point.x + side * 6, point.y); context.lineTo(point.x + side * 11, y + labelHeight / 2); context.lineTo(side > 0 ? x : x + labelWidth, y + labelHeight / 2); context.stroke();
       context.fillStyle = selected ? accent : water; context.fillRect(x, y, labelWidth, labelHeight); context.strokeRect(x, y, labelWidth, labelHeight);

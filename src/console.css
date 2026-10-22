@@ -100,8 +100,8 @@ body::after {
 .command-bar nav small, .connection { color: var(--command-muted); }
 .command-bar nav a:not(.current):hover { background: var(--command-hover); }
 .header-divider { background: var(--ef-rule); }
-.command-bar nav { gap: 4px; }
-.command-bar nav a { min-height: 45px; padding: 0 18px; }
+.command-bar nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.command-bar nav a { min-width: 0; min-height: 45px; padding: 0 18px; justify-content: center; white-space: nowrap; }
 .command-bar nav a.current::after {
   content: '';
   position: absolute;

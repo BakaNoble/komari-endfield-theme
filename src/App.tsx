@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Activity, ArrowDown, ArrowUp, ArrowUpRight, ChevronRight, CircleHelp, Clock3, Cpu, HardDrive, LayoutDashboard, LayoutGrid, List, MemoryStick, Moon, Network, Pause, Play, RefreshCw, Search, Server, Settings2, Sun, X } from 'lucide-react';
 import { useMonitor } from './useMonitor';
 import { bytes, duration, percent, warning, type NodeInfo } from './model';
@@ -16,6 +17,7 @@ import { NetworkDiagnostics } from './NetworkDiagnostics';
 import { usePingMonitor } from './usePingMonitor';
 import { resolveNodeView, type Page, type NodeView, type ViewPreferences } from './viewPreferences';
 import { ListColumn } from './ListColumn';
+import { createPageNavigator, pageFromRoute } from './pageNavigation';
 
 function readStorage(key: string) { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } }
 function writeStorage(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Storage is optional. */ } }
@@ -24,7 +26,8 @@ const parseRoute = () => { try { return decodeURIComponent(location.hash.slice(1
 export default function App() {
   const monitor = useMonitor();
   const { nodes, statuses, info, loading, error, liveError, updated, paused, stale, setPaused, refresh, refreshing, isDemo } = monitor;
-  const [page, setPage] = useState<Page>(() => { const initial = parseRoute().replace(/^\//, ''); return initial === 'nodes' || initial === 'network' ? initial : 'overview'; });
+  const [page, setPage] = useState<Page>(() => pageFromRoute(parseRoute()) ?? 'overview');
+  const currentPage = useRef(page);
   const [route, setRoute] = useState(parseRoute);
   const ping = usePingMonitor(page === 'network', isDemo, paused, nodes);
   const [query, setQuery] = useState('');
@@ -62,16 +65,22 @@ export default function App() {
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
-    const change = () => setRoute(parseRoute());
     const media = matchMedia('(prefers-color-scheme: dark)');
     const color = () => setSystemDark(media.matches);
-    window.addEventListener('hashchange', change); media.addEventListener('change', color);
-    return () => { clearInterval(timer); window.removeEventListener('hashchange', change); media.removeEventListener('change', color); };
+    media.addEventListener('change', color);
+    return () => { clearInterval(timer); media.removeEventListener('change', color); };
   }, []);
   useEffect(() => {
-    const next = route.replace(/^\//, '');
-    if (next === 'overview' || next === 'nodes' || next === 'network') { setPage(next); setSort('default'); }
-  }, [route]);
+    const navigator = createPageNavigator({ current: () => currentPage.current, commit: (nextRoute, nextPage) => {
+      flushSync(() => {
+        setRoute(nextRoute);
+        if (nextPage) { currentPage.current = nextPage; setPage(nextPage); setSort('default'); }
+      });
+    } });
+    const change = () => navigator.navigate(parseRoute());
+    window.addEventListener('hashchange', change);
+    return () => { window.removeEventListener('hashchange', change); navigator.destroy(); };
+  }, []);
   useEffect(() => {
     const html = document.documentElement;
     html.dataset.theme = dark ? 'dark' : 'light';
@@ -152,7 +161,7 @@ export default function App() {
       {(error || liveError || paused) && <div className="connection-notice" role="status"><Activity size={17} /><span>{error || (paused ? '已暂停 / 数据未更新' : `${liveError} / 数据未更新`)}</span>{error && info.private_site ? <a className="ef-btn small" href="/admin">前往登录</a> : <button className="ef-btn small" onClick={paused ? () => setPaused(false) : refresh}>{paused ? '继续更新' : '重新连接'}</button>}</div>}
       {page !== 'nodes' && nodes.length > 0 && <section className={`overview ${page === 'network' ? 'network-overview' : ''} ${stale ? 'is-stale' : ''}`} aria-label={page === 'network' ? '网络概览' : '监控概览'}>
         {page === 'overview' ? <ResourceSummary nodes={nodes} statuses={statuses} threshold={threshold} /> : <div className="resource-summary network-summary"><div className="summary-label"><Eyebrow>TRANSFER TOTAL</Eyebrow><span>在线节点累计流量</span></div><div className="transfer-total"><ArrowUp size={17} /><span>累计上传</span><strong>{bytes(sum('totalUp'))}</strong></div><div className="transfer-total"><ArrowDown size={17} /><span>累计下载</span><strong>{bytes(sum('totalDown'))}</strong></div></div>}
-        <div className={`availability ${page === 'network' ? 'has-globe' : ''}`}>{page === 'network' ? <GlobePanel nodes={nodes} statuses={statuses} dark={dark} accent={accent} selected={effectiveRegion} onSelect={setRegionFilter} /> : <StatusRing nodes={nodes} statuses={statuses} threshold={threshold} scope={tiltScope} />}<div className="ring-legend"><span><i className="normal" />在线 {online.length}</span><span><i className="alert" />离线 {offline.length}</span>{pending > 0 && <span>等待 {pending}</span>}</div><div className="system-status">{stale ? '数据未更新' : loading ? '正在获取节点状态' : !knownOnline ? '等待节点上报' : offline.length || attention.length ? `${offline.length + attention.length} 个节点需要注意` : '所有节点运行正常'}</div></div>
+        <div className={`availability ${page === 'network' ? 'has-globe' : ''}`}>{page === 'network' ? <GlobePanel nodes={nodes} statuses={statuses} dark={dark} accent={accent} selected={effectiveRegion} onSelect={setRegionFilter} /> : <StatusRing nodes={nodes} statuses={statuses} threshold={threshold} scope={tiltScope} active={!stale && !loading} />}<div className="ring-legend"><span><i className="normal" />在线 {online.length}</span><span><i className="alert" />离线 {offline.length}</span>{pending > 0 && <span>等待 {pending}</span>}</div><div className="system-status">{stale ? '数据未更新' : loading ? '正在获取节点状态' : !knownOnline ? '等待节点上报' : offline.length || attention.length ? `${offline.length + attention.length} 个节点需要注意` : '所有节点运行正常'}</div></div>
         <div className="bandwidth-summary"><div className="summary-label"><Eyebrow>LIVE BANDWIDTH</Eyebrow><span>实时网络速率</span></div><div className="bandwidth-values"><div><span><ArrowUp size={13} />上传</span><strong>{bytes(sum('up'), true)}</strong></div><div><span><ArrowDown size={13} />下载</span><strong>{bytes(sum('down'), true)}</strong></div></div><Chart compact values={trend} format={v => bytes(v, true)} label={isDemo ? '示例下载速率趋势' : '本次浏览期间的下载速率趋势'} /><div className="chart-caption"><span>下载速率趋势</span><span>{isDemo ? '示例记录' : '本次会话'}</span></div></div>
         <div className="overview-inventory">{page === 'network' ? <><span><Activity size={14} /><b>{ping.tasks.length}</b> 个测试目标</span><span><Network size={14} /><b>{Object.values(ping.health).filter(s => s.tested > 0).length}</b> 台主机有记录</span><span>统计范围 <b>{ping.hours}</b> 小时</span></> : <><span><Cpu size={14} /><b>{nodes.reduce((a, n) => a + n.cpu_cores, 0)}</b> CPU 核心</span><span><MemoryStick size={14} /><b>{bytes(nodes.reduce((a, n) => a + n.mem_total, 0))}</b> 总内存</span><span><HardDrive size={14} /><b>{bytes(nodes.reduce((a, n) => a + n.disk_total, 0))}</b> 总磁盘</span></>}<span className="inventory-note">{groups.length} 个分组 <i>/</i> {nodes.length} 个节点</span></div>
       </section>}

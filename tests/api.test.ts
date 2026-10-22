@@ -4,6 +4,31 @@ import { nodes, history, pingTasks, pingReport, pingReports, LiveSource, ApiErro
 const originalFetch = globalThis.fetch;
 const respond = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 
+test('malformed JSON envelopes produce a controlled API error without fallback', async () => {
+  try {
+    for (const body of [null, [], 42, 'invalid']) {
+      let calls = 0;
+      globalThis.fetch = (async () => { calls++; return respond(body); }) as typeof fetch;
+      await assert.rejects(nodes(), (e: unknown) => e instanceof ApiError && e.code === 502);
+      assert.equal(calls, 1);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('closing history cancels an in-flight request without starting REST fallback', async () => {
+  const controller = new AbortController(); let calls = 0;
+  globalThis.fetch = (async (_path, options) => {
+    calls++;
+    return new Promise((_resolve, reject) => options!.signal!.addEventListener('abort', () => reject(options!.signal!.reason), { once: true }));
+  }) as typeof fetch;
+  try {
+    const pending = history('a', 6, controller.signal);
+    controller.abort();
+    await assert.rejects(pending, (e: any) => e.name === 'AbortError');
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test('node loading falls back to REST only for an unsupported RPC method', async () => {
   const paths: string[] = [];
   globalThis.fetch = (async path => {

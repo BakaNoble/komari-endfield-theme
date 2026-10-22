@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, X } from 'lucide-react';
 import { bytes, percent, warning, type NodeInfo, type NodeStatus } from './model';
 import { usePointerTilt, type TiltScope } from './usePointerTilt';
+import { observeInstrument } from './instrumentMotion';
 
 export function Eyebrow({ children }: { children: ReactNode }) { return <span className="ef-eyebrow slash">{children}</span>; }
 export function Logo() { return <svg width="30" height="30" viewBox="0 0 40 40" aria-hidden="true"><path fill="currentColor" d="M4 4h11v32H4zm18 0h14L22 22zm0 24h14v8H22z" /></svg>; }
@@ -18,32 +19,41 @@ export function NetworkValue({ value, direction }: { value: number | null; direc
 export function StateBadge({ status, alert }: { status: NodeStatus | undefined; alert: boolean }) {
   return <span className={`state-badge ${status ? (status.online ? (alert ? 'attention' : 'online') : 'offline') : 'pending'}`}><i />{status ? (status.online ? (alert ? '高负载' : '在线') : '离线') : '等待上报'}</span>;
 }
-export function StatusRing({ nodes, statuses, threshold, scope = 'component' }: { nodes: NodeInfo[]; statuses: Record<string, NodeStatus>; threshold: number; scope?: TiltScope }) {
+export function StatusRing({ nodes, statuses, threshold, scope = 'component', active = true }: { nodes: NodeInfo[]; statuses: Record<string, NodeStatus>; threshold: number; scope?: TiltScope; active?: boolean }) {
   const tiltRef = usePointerTilt(scope);
+  const hatchId = `offline-hatch-${useId().replaceAll(':', '')}`;
   const online = nodes.filter(n => statuses[n.uuid]?.online).length;
   const known = nodes.some(n => !!statuses[n.uuid]);
+  const ratio = nodes.length ? online / nodes.length : 0;
   const r = 92, c = 2 * Math.PI * r;
+  useEffect(() => {
+    if (tiltRef.current) return observeInstrument(tiltRef.current, active && known);
+  }, [tiltRef, active, known]);
   // Each sector represents one actual node; status and alerts share the list semantics.
-  return <div className="status-ring" ref={tiltRef}>
+  return <div className="status-ring" ref={tiltRef} role="img" aria-label={known ? `${nodes.length} 个节点，${online} 个在线，在线率 ${(ratio * 100).toFixed(0)}%` : `${nodes.length} 个节点，等待状态上报`}>
     <div className="ring-scene">
     <svg viewBox="0 0 240 240" aria-hidden="true">
-      <defs><pattern id="offline-hatch" patternUnits="userSpaceOnUse" width="5" height="5"><path d="M-1 1L1-1M0 5L5 0M4 6L6 4" stroke="currentColor" strokeWidth="1" /></pattern></defs>
+      <defs><pattern id={hatchId} patternUnits="userSpaceOnUse" width="5" height="5"><path d="M-1 1L1-1M0 5L5 0M4 6L6 4" stroke="currentColor" strokeWidth="1" /></pattern></defs>
       <circle cx="120" cy="120" r="108" fill="none" className="ring-rail" />
-      <circle cx="120" cy="120" r="116" fill="none" className="ring-fine" strokeDasharray="96 12 24 12" />
+      <g className="ring-rotor ring-rotor-outer"><circle cx="120" cy="120" r="116" fill="none" className="ring-fine" strokeDasharray="96 12 24 12" /></g>
       <g className="ring-ticks">{Array.from({ length: 48 }, (_, i) => <path key={i} d={`M120 ${i % 4 === 0 ? 10 : 13}v${i % 4 === 0 ? 7 : 3}`} transform={`rotate(${i * 7.5} 120 120)`} />)}</g>
       <circle cx="120" cy="120" r="74" fill="none" className="ring-inner" />
-      <circle cx="120" cy="120" r="68" fill="none" className="ring-fine" strokeDasharray="72 36" transform="rotate(12 120 120)" />
+      <g className="ring-rotor ring-rotor-inner"><circle cx="120" cy="120" r="68" fill="none" className="ring-fine" strokeDasharray="72 36" transform="rotate(12 120 120)" /></g>
+      <circle cx="120" cy="120" r="79" fill="none" className="ring-reading" pathLength="100" strokeDasharray="100" strokeDashoffset={100 - ratio * 100} transform="rotate(-90 120 120)" />
       {nodes.length ? nodes.map((n, i) => {
         const s = statuses[n.uuid];
+        const sector = Math.max(.1, c / nodes.length - Math.min(7, c / nodes.length * .16));
         return <circle key={n.uuid} cx="120" cy="120" r={r} fill="none" strokeWidth="15"
           className={`ring-segment ${!s ? 'unknown' : !s.online ? 'off' : warning(n, s, threshold) ? 'warn' : ''}`}
-          strokeDasharray={`${Math.max(.1, c / nodes.length - Math.min(7, c / nodes.length * .16))} ${c}`}
+          style={{ '--ring-sector': sector, '--ring-delay': `${Math.min(i * 38, 180)}ms`, stroke: s && !s.online ? `url(#${hatchId})` : undefined } as CSSProperties}
+          strokeDasharray={`${sector} ${c}`}
           transform={`rotate(${i * 360 / nodes.length - 90} 120 120)`} />;
       }) : <circle cx="120" cy="120" r={r} fill="none" strokeWidth="15" className="ring-segment unknown" />}
+      {known && <g className="ring-needle" style={{ transform: `rotate(${ratio * 360}deg)` }}><g className="ring-needle-head"><path d="M120 16l-3.5 8h7z" /></g></g>}
       <path d="M120 4v9m0 214v9M4 120h9m214 0h9" className="ring-fine" />
       <path d="M117 17l3-5 3 5zm6 206-3 5-3-5z" className="ring-index" />
     </svg>
-    <div className="ring-label"><span className="eyebrow">ONLINE NODES</span><div><strong>{known ? String(online).padStart(2, '0') : '—'}</strong><span>/{String(nodes.length).padStart(2, '0')}</span></div><span className="ring-caption">在线节点</span></div>
+    <div className="ring-label" aria-hidden="true"><span className="eyebrow">ONLINE NODES</span><div><strong key={`${known}:${online}`} className="ring-count">{known ? String(online).padStart(2, '0') : '—'}</strong><span>/{String(nodes.length).padStart(2, '0')}</span></div><span className="ring-caption">在线节点</span><span className="ring-ratio">在线率 <b>{known ? `${(ratio * 100).toFixed(0)}%` : '—'}</b></span></div>
     </div>
   </div>;
 }

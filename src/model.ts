@@ -33,6 +33,10 @@ export function normalizeNodes(raw: unknown): NodeInfo[] {
     os: String(n.os || ''), cpu_name: String(n.cpu_name || ''), cpu_cores: numeric(n.cpu_cores) ?? 0,
     arch: String(n.arch || ''), virtualization: String(n.virtualization || ''),
     mem_total: numeric(n.mem_total) ?? 0, disk_total: numeric(n.disk_total) ?? 0,
+    tags: typeof n.tags === 'string' ? n.tags : '', public_remark: typeof n.public_remark === 'string' ? n.public_remark : '',
+    expired_at: typeof n.expired_at === 'string' ? n.expired_at : undefined,
+    weight: typeof n.weight === 'number' && Number.isFinite(n.weight) ? n.weight : 0,
+    traffic_limit: numeric(n.traffic_limit) ?? 0,
   })).sort((a, b) => (a.weight ?? 0) - (b.weight ?? 0) || a.name.localeCompare(b.name));
 }
 // RPC2 returns flat records; the older /api/clients WebSocket returns nested reports.
@@ -81,11 +85,12 @@ export function warning(node: NodeInfo, status: NodeStatus | undefined, threshol
   return !!status?.online && [status.cpu, percent(status.ram, node.mem_total), percent(status.disk, node.disk_total)].some(v => v != null && v >= threshold);
 }
 export function traffic(node: NodeInfo, s: NodeStatus | undefined): number | null {
-  if (!s || s.totalUp == null || s.totalDown == null) return null;
+  if (!s) return null;
+  if (node.traffic_limit_type === 'up') return s.totalUp;
+  if (node.traffic_limit_type === 'down') return s.totalDown;
+  if (s.totalUp == null || s.totalDown == null) return null;
   switch (node.traffic_limit_type) {
     case 'sum': return s.totalUp + s.totalDown;
-    case 'up': return s.totalUp;
-    case 'down': return s.totalDown;
     case 'min': return Math.min(s.totalUp, s.totalDown);
     default: return Math.max(s.totalUp, s.totalDown);
   }

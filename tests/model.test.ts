@@ -2,6 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeStatuses, normalizeNodes, normalizeHistory, percent, traffic, warning, bytes } from '../src/model.ts';
 
+test('malformed optional node metadata cannot reach string-only card renderers', () => {
+  const [node] = normalizeNodes([{ uuid: 'a', tags: ['tag'], public_remark: {}, expired_at: {}, weight: 'bad', traffic_limit: -1 }]);
+  assert.equal(node.tags, ''); assert.equal(node.public_remark, '');
+  assert.equal(node.expired_at, undefined); assert.equal(node.weight, 0); assert.equal(node.traffic_limit, 0);
+});
+
+test('one-way quotas remain available when the opposite counter is unknown', () => {
+  const [node] = normalizeNodes([{ uuid: 'a' }]);
+  const s = normalizeStatuses({ a: { net_total_up: 0 } }).a;
+  assert.equal(traffic({ ...node, traffic_limit_type: 'up' }, s), 0);
+  assert.equal(traffic({ ...node, traffic_limit_type: 'down' }, { ...s, totalDown: 12, totalUp: null }), 12);
+  assert.equal(traffic({ ...node, traffic_limit_type: 'sum' }, s), null);
+});
+
 test('normalizes current RPC2 reports without losing zero readings or inflating offline status', () => {
   const result = normalizeStatuses({ a: { client: 'a', online: true, cpu: 0, ram: 0, disk: 12, net_in: 0, net_out: 20, net_total_out: 0, net_total_in: 123, connections: 0 }, b: { client: 'b', online: false, cpu: 92 } });
   assert.equal(result.a.cpu, 0); assert.equal(result.a.down, 0); assert.equal(result.a.totalUp, 0);

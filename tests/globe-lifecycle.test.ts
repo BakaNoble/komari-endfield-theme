@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGlobe } from '../src/globeCanvas.ts';
+import { GLOBE_LATITUDE, GLOBE_TILT, projectGlobe } from '../src/globeModel.ts';
 
 function environment(reducedMotion = false) {
   const listeners = () => {
@@ -15,6 +16,7 @@ function environment(reducedMotion = false) {
   const documentMock = { ...listeners(), hidden: false };
   const media = { ...listeners(), matches: reducedMotion };
   const frames = new Map<number, FrameRequestCallback>();
+  const drawCalls: { method: string; args: number[] }[] = [];
   const observers: { disconnected: boolean; fire: (visible: boolean) => void }[] = [];
   let next = 0;
   const globals = {
@@ -34,16 +36,73 @@ function environment(reducedMotion = false) {
   for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const canvas = {
     ...listeners(), width: 0, height: 0, dataset: {} as Record<string, string>, title: '',
-    getContext: () => new Proxy({}, { get: () => () => {} }),
+    getContext: () => new Proxy({}, { get: (_target, method: string) => (...args: number[]) => {
+      if (['arc', 'clip', 'fillRect'].includes(method)) drawCalls.push({ method, args });
+    } }),
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 360, height: 270 }),
     setPointerCapture() {}, releasePointerCapture() {}, hasPointerCapture: () => true,
   };
   return {
-    documentMock, media, frames, observers, canvas,
+    documentMock, media, frames, observers, canvas, drawCalls,
     step(time: number) { const queued = [...frames.values()]; frames.clear(); queued.forEach(fn => fn(time)); },
     restore() { for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); } },
   };
 }
+
+test('planet outline and surface clipping expand and shrink with the same zoom radius', () => {
+  const env = environment(true);
+  try {
+    const globe = createGlobe(env.canvas as any, [], { onSelect() {}, onRunning() {}, onReduced() {} })!;
+    const base = Math.min(360 * .47, 270 * .49);
+    const check = (time: number, scale: number) => {
+      env.drawCalls.length = 0; env.step(time);
+      const radii = env.drawCalls.filter(call => call.method === 'arc').map(call => call.args[2]);
+      assert.equal(radii.length, 2);
+      for (const radius of radii) assert.ok(Math.abs(radius - base * scale) < .0001, `expected ${base * scale}, got ${radius}`);
+    };
+    check(100, 1);
+    globe.zoom(.8); check(200, 1.8);
+    assert.ok(base * 1.8 > 360 / 2 && base * 1.8 > 270 / 2, 'sphere extends past the rectangular canvas when zoomed in');
+    globe.zoom(-1); check(300, .8);
+    globe.reset(); check(400, 1);
+    globe.destroy();
+  } finally { env.restore(); }
+});
+
+test('zoomed regions outside the original circle remain selectable inside the canvas rectangle', () => {
+  const env = environment(true), selected: string[] = [];
+  try {
+    const globe = createGlobe(env.canvas as any, [], { onSelect: code => selected.push(code), onRunning() {}, onReduced() {} })!;
+    globe.update({ regions: [{ code: 'HK', coordinates: [150, 20], online: 1, total: 1, pending: 0 }], selected: 'all', dark: false, accent: 'yellow' });
+    globe.zoom(.8); env.step(100);
+    const point = projectGlobe(150, 20, 110, GLOBE_LATITUDE, GLOBE_TILT);
+    const radius = Math.min(360 * .47, 270 * .49) * 1.8;
+    const x = 180 + point.x * radius, y = 135 - point.y * radius;
+    assert.ok(Math.hypot(x - 180, y - 135) > radius / 1.8);
+    assert.ok(x > 4 && x < 356 && y > 4 && y < 266);
+    env.canvas.fire('pointerdown', { button: 0, pointerId: 1, clientX: x, clientY: y });
+    env.canvas.fire('pointerup', { pointerId: 1, clientX: x, clientY: y });
+    assert.deepEqual(selected, ['HK']);
+    globe.destroy();
+  } finally { env.restore(); }
+});
+
+test('regions cropped beyond the canvas rectangle do not remain interactive', () => {
+  const env = environment(true), selected: string[] = [];
+  try {
+    const globe = createGlobe(env.canvas as any, [], { onSelect: code => selected.push(code), onRunning() {}, onReduced() {} })!;
+    globe.update({ regions: [{ code: 'JP', coordinates: [180, 20], online: 1, total: 1, pending: 0 }], selected: 'all', dark: false, accent: 'yellow' });
+    globe.zoom(.8); env.step(100);
+    const point = projectGlobe(180, 20, 110, GLOBE_LATITUDE, GLOBE_TILT);
+    const radius = Math.min(360 * .47, 270 * .49) * 1.8;
+    const x = 180 + point.x * radius, y = 135 - point.y * radius;
+    assert.ok(x > 360);
+    env.canvas.fire('pointerdown', { button: 0, pointerId: 1, clientX: x, clientY: y });
+    env.canvas.fire('pointerup', { pointerId: 1, clientX: x, clientY: y });
+    assert.deepEqual(selected, []);
+    globe.destroy();
+  } finally { env.restore(); }
+});
 
 test('globe stops rendering when hidden or outside the viewport and removes work on unmount', () => {
   const env = environment();

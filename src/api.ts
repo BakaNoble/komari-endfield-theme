@@ -13,6 +13,7 @@ async function request(path: string, options: RequestInit = {}) {
   if (!response.ok) throw new ApiError(response.status === 401 || response.status === 403 ? '此站点需要登录后查看。' : `请求失败（HTTP ${response.status}），请重试。`, response.status);
   let body;
   try { body = await response.json(); } catch { throw new ApiError('接口没有返回 JSON，请检查 Komari 服务地址。', 502); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ApiError('接口返回了无效的数据。', 502);
   if (body.error) throw new ApiError(body.error.message || '监控接口请求失败。', body.error.code);
   if (body.status === 'error') throw new ApiError(body.message || '监控接口请求失败。', 400);
   return body;
@@ -28,11 +29,11 @@ export async function nodes() {
   try { return normalizeNodes(await rpc('common:getNodes')); }
   catch (e) { if (!unsupported(e)) throw e; return normalizeNodes((await request('/api/nodes')).data); }
 }
-export async function history(uuid: string, hours: number) {
-  try { return normalizeHistory(await rpc('common:getRecords', { type: 'load', uuid, hours, load_type: 'all', maxCount: 240 })); }
+export async function history(uuid: string, hours: number, signal?: AbortSignal) {
+  try { return normalizeHistory(await rpc('common:getRecords', { type: 'load', uuid, hours, load_type: 'all', maxCount: 240 }, signal)); }
   catch (e) {
     if (!unsupported(e)) throw e;
-    return normalizeHistory((await request(`/api/records/load?uuid=${encodeURIComponent(uuid)}&hours=${hours}&load_type=all`)).data);
+    return normalizeHistory((await request(`/api/records/load?uuid=${encodeURIComponent(uuid)}&hours=${hours}&load_type=all`, { signal })).data);
   }
 }
 export async function pingTasks(signal?: AbortSignal) {

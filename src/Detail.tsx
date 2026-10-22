@@ -21,11 +21,12 @@ export default function Detail({ node, status, onClose, demo, threshold, stale, 
   useEffect(() => {
     if (!node) return;
     let stopped = false;
+    const controller = new AbortController();
     setLoading(true); setError(''); setRecords([]);
-    const load = demo ? Promise.resolve(demoHistory(node.uuid, hours)) : history(node.uuid, hours);
+    const load = demo ? Promise.resolve(demoHistory(node.uuid, hours)) : history(node.uuid, hours, controller.signal);
     load.then(data => { if (!stopped) setRecords(data); }).catch(e => { if (!stopped) setError(e instanceof Error ? e.message : '历史记录加载失败。'); })
       .finally(() => { if (!stopped) setLoading(false); });
-    return () => { stopped = true; };
+    return () => { stopped = true; controller.abort(); };
   }, [node?.uuid, hours, demo, revision]);
   const s = status; const active = s?.online;
   const expiry = expiryInfo(node?.expired_at);

@@ -21,9 +21,9 @@ h1,h2,h3,p{margin:0}
 .brand>span{font-size:23px;font-weight:760;line-height:1.1;font-stretch:125%;letter-spacing:-.5px;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand small{display:block;font-size:8px;font-weight:500;letter-spacing:2.4px;color:#aaa;margin-top:7px}
 .command-bar nav{display:flex;gap:6px;align-self:stretch;align-items:center}
-.command-bar nav a{display:flex;align-items:center;gap:8px;height:37px;padding:0 15px;position:relative;font-size:12px}
+.command-bar nav a{display:flex;align-items:center;gap:8px;height:37px;padding:0 15px;position:relative;font-size:12px;clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%)}
 .command-bar nav small{font-size:9px;letter-spacing:.8px;color:#9d9d9a;font-stretch:125%;margin-left:4px}
-.command-bar nav a.current{background:var(--ef-signal);color:#161616;clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%);font-weight:700}
+.command-bar nav a.current{background:var(--ef-signal);color:#161616;font-weight:700}
 .command-bar nav .current small{color:#161616}
 .command-bar nav a:not(.current):hover{background:#2b2b2b}
 .command-bar nav a:focus-visible{outline-offset:-3px}
@@ -80,7 +80,6 @@ h1,h2,h3,p{margin:0}
 .ring-fine{stroke:var(--ef-rule);stroke-width:1}
 .ring-segment{stroke:var(--ef-ink)}
 .ring-segment.warn{stroke:var(--ef-signal)}
-.ring-segment.off{stroke:url(#offline-hatch)}
 .ring-segment.unknown{stroke:var(--ef-chip)}
 .ring-label{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:4px}
 .eyebrow{font-size:9px;font-stretch:125%;letter-spacing:1.4px;color:var(--ef-ink-2)}

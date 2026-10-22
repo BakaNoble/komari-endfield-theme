@@ -57,10 +57,12 @@ export function useMonitor() {
   }, []);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined; let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined; let stopped = false, polling = false;
     async function poll() {
-      if (stopped || paused || document.hidden || loading || error) return;
+      if (stopped || polling || paused || document.hidden || loading || error) return;
+      polling = true;
       await fetchLatest();
+      polling = false;
       if (!stopped) timer = setTimeout(poll, interval);
     }
     function visibility() { clearTimeout(timer); if (!document.hidden) void poll(); }

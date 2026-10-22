@@ -9,7 +9,7 @@ export function usePingMonitor(active: boolean, demo: boolean, paused: boolean, 
   const [taskLoading, setTaskLoading] = useState(!demo), [taskError, setTaskError] = useState('');
   const [hours, setHours] = useState(1), [revision, setRevision] = useState(0);
   const [state, setState] = useState<{ key: string; reports: Record<number, PingReport>; errors: Record<number, string>; loading: boolean; updated: Date | null }>({ key: '', reports: {}, errors: {}, loading: false, updated: null });
-  const manual = useRef(false), lastRevision = useRef(0);
+  const manual = useRef(false);
   const key = `${tasks.map(t => t.id).join(',')}:${hours}`;
   useEffect(() => {
     if (!active || demo) return;
@@ -19,9 +19,10 @@ export function usePingMonitor(active: boolean, demo: boolean, paused: boolean, 
     return () => { stopped = true; controller.abort(); };
   }, [active, demo, revision]);
   useEffect(() => {
-    const requested = manual.current && lastRevision.current !== revision;
-    lastRevision.current = revision; manual.current = false;
-    if (!active || !tasks.length || taskError || (paused && !requested)) {
+    // Keep a manual refresh pending until task discovery and its report load finish.
+    // Task discovery can change the key and abort an earlier report request.
+    const requested = manual.current;
+    if (!active || taskLoading || !tasks.length || taskError || (paused && !requested)) {
       setState(s => s.loading ? { ...s, loading: false } : s);
       return;
     }
@@ -33,7 +34,10 @@ export function usePingMonitor(active: boolean, demo: boolean, paused: boolean, 
       setState(s => ({ ...s, key, reports: s.key === key ? s.reports : {}, errors: {}, loading: true }));
       try {
         const result = demo ? { reports: Object.fromEntries(tasks.map(t => [t.id, demoPingReport(t.id, hours)])), errors: {} } : await api.pingReports(tasks.map(t => t.id), hours, controller.signal);
-        if (!stopped) setState(s => ({ key, reports: { ...(s.key === key ? s.reports : {}), ...result.reports }, errors: result.errors, loading: false, updated: new Date() }));
+        if (!stopped) {
+          manual.current = false;
+          setState(s => ({ key, reports: { ...(s.key === key ? s.reports : {}), ...result.reports }, errors: result.errors, loading: false, updated: Object.keys(result.reports).length ? new Date() : s.key === key ? s.updated : null }));
+        }
       } catch (e) {
         if (!stopped) setState(s => ({ ...s, key, loading: false, errors: Object.fromEntries(tasks.map(t => [t.id, e instanceof Error ? e.message : '无法读取延迟记录。'])) }));
       } finally {
@@ -44,7 +48,7 @@ export function usePingMonitor(active: boolean, demo: boolean, paused: boolean, 
     const visibility = () => { clearTimeout(timer); if (!document.hidden && !paused) void poll(); };
     void poll(); document.addEventListener('visibilitychange', visibility);
     return () => { stopped = true; controller.abort(); clearTimeout(timer); document.removeEventListener('visibilitychange', visibility); };
-  }, [active, demo, paused, key, revision, taskError]);
+  }, [active, demo, paused, key, revision, taskError, taskLoading]);
   const reports = useMemo(() => state.key === key ? state.reports : {}, [state.key, state.reports, key]);
   const errors = state.key === key ? state.errors : {};
   const summaries = useMemo(() => Object.fromEntries(tasks.map(t => [t.id, Object.fromEntries(nodes.map(node => [node.uuid, pingSummary(reports[t.id] ?? emptyPingReport(), node.uuid, t.id)]))])), [reports, nodes, tasks]);
