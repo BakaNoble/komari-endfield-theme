@@ -1,0 +1,56 @@
+/* Fleet instrument: fixed data sectors, calibrated scale, slow mechanical rims. */
+.availability .status-ring {
+  width: min(360px, 100%);
+  height: auto;
+  aspect-ratio: 1;
+  container-type: inline-size;
+}
+.availability { padding-top: 12px; }
+/* The reticle stays fixed while the inner scene follows the pointer. */
+.status-ring > .ring-frame { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ring-scene > svg { overflow: visible; animation: none; }
+.ring-chassis { fill: none; stroke: var(--console-tick); stroke-width: .8; opacity: .6; }
+.ring-boundary { fill: none; stroke: var(--console-rule); stroke-width: .6; }
+.ring-mechanical { fill: none; stroke: var(--console-text); stroke-width: 2.5; opacity: .55; }
+.ring-scale { fill: none; stroke: var(--console-dim); stroke-width: .8; }
+.ring-scale .lit { stroke: var(--console-text); }
+.ring-scale-labels { fill: var(--console-muted); font-size: 6px; font-weight: 550; text-anchor: middle; dominant-baseline: central; font-variant-numeric: tabular-nums; }
+.ring-rate-track { fill: none; stroke: var(--console-rule); stroke-width: 2; }
+.ring-reading { fill: none; stroke: var(--console-text); stroke-width: 2; opacity: .9; transition: stroke-dasharray 680ms var(--ef-mech); }
+.ring-rail { fill: none; stroke: var(--console-rule); stroke-width: 7; opacity: .35; }
+.ring-segment { transition: stroke 280ms var(--ef-mech); }
+.ring-segment.unknown { opacity: .6; }
+.ring-core { fill: var(--console); stroke: var(--console-rule); stroke-width: .6; }
+.ring-inner { fill: none; stroke: var(--console-tick); stroke-width: .7; opacity: .6; }
+.ring-coupler { stroke: var(--console-text); stroke-width: 2; }
+.ring-core-cross { fill: none; stroke: var(--console-tick); stroke-width: 1; }
+.ring-needle, .ring-rotor { transform-box: view-box; transform-origin: 120px 120px; }
+.ring-needle { transition: transform 680ms var(--ef-mech); }
+.ring-needle path { fill: var(--ef-signal); stroke: var(--console-text); stroke-width: .65; }
+.ring-bottom-scale { stroke: var(--console-tick); stroke-width: 1.2; opacity: .5; }
+.ring-rate-label { fill: var(--console-text); text-anchor: middle; font-size: 8px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.status-ring .ring-label { padding: 0; }
+.status-ring .ring-label > .eyebrow { font-size: 2.2cqw; letter-spacing: .4cqw; color: var(--console-muted); }
+.status-ring .ring-label > div { margin: 1cqw 0 0; gap: 1cqw; line-height: 1; }
+.status-ring .ring-label strong { font-size: 20cqw; letter-spacing: -1cqw; font-weight: 650; }
+.status-ring .ring-label > div > span { font-size: 6cqw; }
+.status-ring .ring-caption { font-size: 3cqw; margin-top: 2cqw; letter-spacing: .5cqw; }
+.ring-runtime { display: flex; align-items: center; gap: 5px; margin-top: 4cqw; padding-top: 2cqw; border-top: 1px solid var(--console-rule); color: var(--console-muted); font-size: 2.2cqw; }
+.ring-runtime i { width: 4px; height: 4px; background: var(--console-muted); }
+.status-ring[data-instrument-running] .ring-runtime i { background: var(--ef-signal); outline: 1px solid color-mix(in srgb, var(--console-text) 35%, transparent); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .ring-rotor-outer { animation: instrument-turn 60s linear infinite; }
+  .ring-rotor-inner { animation: instrument-turn 42s linear infinite reverse; }
+  .ring-segment { animation: instrument-sector-in 520ms var(--ef-mech) var(--ring-delay, 0ms) backwards; }
+  .ring-count { animation: instrument-readout-in 360ms var(--ef-snap) both; }
+  .ring-chassis { animation: instrument-frame-in 600ms var(--ef-snap) both; }
+  .status-ring:not([data-instrument-running]) .ring-rotor { animation-play-state: paused; }
+  @keyframes instrument-turn { to { transform: rotate(360deg); } }
+  @keyframes instrument-sector-in { from { stroke-dashoffset: var(--ring-sector, 0); opacity: 0; } to { stroke-dashoffset: 0; opacity: 1; } }
+  @keyframes instrument-readout-in { from { opacity: .35; clip-path: inset(0 0 100%); } to { opacity: 1; clip-path: inset(0); } }
+  @keyframes instrument-frame-in { from { opacity: 0; } to { opacity: .6; } }
+}
+@media (max-width: 600px) {
+  .availability .status-ring { width: min(310px, 100%); height: auto; }
+}

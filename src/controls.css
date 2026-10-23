@@ -1,0 +1,110 @@
+/* Endfield control family: shared geometry, short mechanical motion and clear states.
+   Host rows remain records; chart legend controls retain their series colors. */
+:root { --control-cut: 8px; --control-rest: var(--ef-panel); --control-rule: var(--console-rule); }
+:root :is(.command-bar nav a, .ef-chip, .ef-btn, .header-icon, .icon-btn,
+    .text-button, .list-status > button, .view-switch button, .chart-tabs > button,
+    .globe-controls button, .globe-index-heading button, .globe-regions button,
+    .active-region button, .ping-notice > button, .multi-host-footer > button,
+    .accent-choice, .search-box button) {
+  --control-base: var(--control-rest);
+  --control-text: var(--ef-ink);
+  --control-fill: var(--ef-signal);
+  --control-edge: var(--control-rule);
+  --control-mark: 0px;
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  mask: none;
+  clip-path: polygon(0 0,100% 0,100% calc(100% - var(--control-cut)),calc(100% - var(--control-cut)) 100%,0 100%);
+  background: var(--control-base);
+  color: var(--control-text);
+  font-weight: 600;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  transition: color 140ms var(--ef-mech), transform 100ms var(--ef-mech);
+  &.header-icon { --control-base: var(--command); --control-text: var(--command-text); }
+  &:where(.search-box button) { --control-base: transparent; }
+  &::before {
+    content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: var(--control-fill); transform: scaleX(0); transform-origin: left center;
+    transition: transform 180ms var(--ef-mech);
+  }
+  &::after {
+    content: ''; position: absolute; inset: 0; width: auto; height: auto; z-index: 1;
+    pointer-events: none; opacity: 1; transform: none; animation: none;
+    box-shadow: inset 0 0 0 1px var(--control-edge);
+    background: linear-gradient(135deg,transparent 43%,var(--control-edge) 46% 54%,transparent 57%) right bottom / var(--control-cut) var(--control-cut) no-repeat,
+      linear-gradient(currentColor,currentColor) 5px 5px / var(--control-mark) var(--control-mark) no-repeat;
+  }
+  &:is(.current,[aria-pressed='true'],[aria-selected='true'],[role='switch'][aria-checked='true']) {
+    --control-base: var(--ef-signal); --control-text: #171a18; --control-edge: transparent;
+    --control-fill: color-mix(in srgb,var(--ef-signal) 86%,#171a18); --control-mark: 3px;
+  }
+  &:is(:hover,:focus-visible,:active):not(:disabled) { background: var(--control-base); text-decoration: none; }
+  &:is(:focus-visible,:active):not(:disabled) { color: #171a18; --control-edge: #171a18; }
+  &:is(:focus-visible,:active):not(:disabled)::before { transform: scaleX(1); transition-duration: 280ms; }
+  &:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
+  &:active:not(:disabled) { transform: translateY(1px); }
+  &:disabled {
+    --control-text: var(--ef-ink-2); --control-base: var(--ef-chip); --control-edge: var(--ef-rule); --control-mark: 0px;
+    cursor: not-allowed; opacity: .55; transform: none;
+    background: repeating-linear-gradient(-45deg,transparent 0 4px,var(--surface-dots) 4px 5px),var(--control-base);
+  }
+  &:disabled::before { transform: scaleX(0); }
+  @media (hover: hover) {
+    &:hover:not(:disabled) { color: #171a18; --control-edge: #171a18; }
+    &:hover:not(:disabled)::before { transform: scaleX(1); transition-duration: 280ms; }
+  }
+}
+/* Primary calls to action start as solid ink; selection stays yellow. */
+:root .ef-btn { min-height: 40px; padding: 9px 22px 9px 15px; font-size: 12px; }
+:root .settings-toggle { min-width: 88px; justify-content: center; gap: 8px; }
+.settings-pages { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; padding-bottom: 18px; margin-bottom: 26px; border-bottom: 1px solid var(--ef-rule); }
+.settings-pages .ef-btn { justify-content: center; }
+.globe-settings > .ef-btn { margin-top: 16px; }
+.traffic-frequency { display: grid; gap: 6px; width: 180px; min-width: 0; flex-shrink: 0; }
+.traffic-frequency output { text-align: right; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.traffic-frequency input[type='range'] { appearance: none; width: 100%; height: 24px; margin: 0; border: 0; padding: 0; cursor: ew-resize; background: linear-gradient(var(--ef-ink),var(--ef-ink)) left center no-repeat,linear-gradient(var(--ef-rule),var(--ef-rule)) center no-repeat; }
+.traffic-frequency input::-webkit-slider-runnable-track { height: 3px; background: transparent; }
+.traffic-frequency input::-webkit-slider-thumb { appearance: none; width: 12px; height: 16px; margin-top: -6.5px; border: 1px solid var(--ef-ink); border-radius: 0; background: var(--ef-signal); }
+.traffic-frequency input::-moz-range-track { height: 3px; background: transparent; }
+.traffic-frequency input::-moz-range-thumb { width: 10px; height: 14px; border: 1px solid var(--ef-ink); border-radius: 0; background: var(--ef-signal); }
+.traffic-frequency input:focus-visible { outline: 2px solid var(--ef-ink); outline-offset: 3px; }
+.traffic-frequency input:disabled { opacity: .35; cursor: default; }
+:root .ef-btn.go { --control-base: var(--ef-ink); --control-text: var(--ef-panel); --control-edge: transparent; }
+:root .ping-notice > button { --control-base: var(--ef-signal); --control-text: #171a18; padding: 8px 16px; min-height: 36px; }
+:root .command-bar nav { gap: 6px; }
+:root .command-bar nav a { --control-base: var(--command); --control-text: var(--command-text); --control-edge: var(--ef-rule); }
+:root .command-bar nav a small { color: inherit; opacity: .65; }
+:root :is(.ef-chip,.text-button,.list-status > button,.active-region button) { min-height: 38px; padding: 6px 13px; }
+:root .ef-chip { gap: 10px; padding-right: 18px; }
+:root .ef-chip .n { color: inherit; opacity: .65; }
+:root :is(.header-icon,.icon-btn) { width: 38px; height: 38px; min-width: 38px; min-height: 38px; padding: 0; }
+:root .view-switch { padding: 0; gap: 4px; border: 0; background: transparent; }
+:root .view-switch button { min-height: 38px; min-width: 68px; padding: 7px 12px; }
+:root .chart-tabs { padding: 8px; gap: 5px; background: transparent; }
+:root .chart-tabs > button { min-height: 38px; flex: 1; padding: 8px 12px; }
+:root .globe-controls { gap: 7px; }
+:root .globe-controls button { min-width: 38px; min-height: 38px; }
+:root .globe-controls button:first-child { padding: 8px 16px; }
+:root .globe-index-heading button { min-width: 48px; min-height: 32px; padding: 6px 12px; }
+:root .globe-regions button { padding: 10px 12px; min-height: 48px; }
+:root .accent-choice { min-height: 42px; outline: 0; padding: 8px 12px; }
+:root .accent-choice:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
+:root .search-box button { --control-cut: 5px; min-width: 30px; min-height: 30px; }
+:root .multi-host-footer > button { padding: 6px 12px; min-height: 34px; }
+:root .ping-comparison-legend > button { clip-path: polygon(0 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%); }
+:root .ping-comparison-legend > button:focus-visible { outline-offset: -3px; }
+@media (hover: none) { :root .ef-btn.go { --control-base: var(--ef-signal); --control-text: #171a18; } }
+@media (max-width: 600px) {
+  :root .command-bar nav a { min-height: 44px; height: 44px; padding: 0 12px; }
+  :root :is(.header-icon,.icon-btn) { width: 36px; min-width: 36px; height: 44px; min-height: 44px; }
+  :root :is(.ef-chip,.text-button,.list-status > button,.view-switch button,.chart-tabs > button,
+      .globe-controls button,.globe-index-heading button,.accent-choice,.multi-host-footer > button,.ef-btn) { min-height: 44px; }
+  :root .search-box button { min-height: 42px; min-width: 36px; }
+  :root .list-status { flex-wrap: wrap; gap: 7px; }
+  :root .list-status > button { padding: 5px 8px; }
+  :root .refresh-controls .text-button { padding: 5px 7px; }
+}
+@media (prefers-reduced-motion: reduce) { :root :is(button,a)::before { transition: none; } }

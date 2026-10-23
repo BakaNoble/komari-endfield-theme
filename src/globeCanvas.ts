@@ -1,8 +1,10 @@
 // Canvas projection and interaction adapted from komari-theme-aero (MIT).
 // See licenses/aero-LICENSE. Earth point data is derived from Natural Earth.
 import { advanceGlobeLongitude, GLOBE_LATITUDE, GLOBE_TILT, projectGlobe, unrollGlobeDrag, wrapLongitude, type Coordinates, type GlobeRegion } from './globeModel.ts';
+import type { TrafficNode } from './globeTraffic.ts';
+import { TrafficScheduler } from './globeTrafficSchedule.ts';
 
-export interface GlobeModel { regions: GlobeRegion[]; selected: string; dark: boolean; accent: string }
+export interface GlobeModel { regions: GlobeRegion[]; selected: string; dark: boolean; accent: string; trafficEffects?: boolean; trafficInterval?: number; trafficConcurrent?: boolean; trafficNodes?: TrafficNode[] }
 interface Callbacks { onSelect: (code: string) => void; onRunning: (running: boolean) => void; onReduced: (reduced: boolean) => void }
 export interface GlobeController {
   update: (model: GlobeModel) => void; focus: (coordinates: Coordinates) => void;
@@ -21,11 +23,14 @@ export function createGlobe(canvas: HTMLCanvasElement, land: number[][], callbac
   let longitude = 110, scale = 1, running = !reduced.matches;
   let flight: { from: number; delta: number; elapsed: number; duration: number } | null = null;
   let visible = true, frame = 0, last = 0, destroyed = false;
+  let redraw = true;
+  const traffic = new TrafficScheduler();
   let drag: { id: number; x: number; y: number; originX: number; originY: number; moved: boolean } | null = null;
   let markers: { x: number; y: number; code: string }[] = [];
   const hint = '拖动沿 Y 轴旋转 · ← / → 调整 · + / − 缩放';
   const setRunning = (value: boolean) => { running = value && !reduced.matches; callbacks.onRunning(running); };
   const stopFrame = () => { cancelAnimationFrame(frame); frame = 0; last = 0; };
+  const trafficActive = () => traffic.active && !reduced.matches;
 
   function draw() {
     const { width: w, height: h } = canvas.getBoundingClientRect();
@@ -37,11 +42,11 @@ export function createGlobe(canvas: HTMLCanvasElement, land: number[][], callbac
     context.setTransform(dpr, 0, 0, dpr, 0, 0); context.clearRect(0, 0, w, h);
     const dark = model.dark, cx = w / 2, cy = h / 2, aperture = Math.min(w * .47, h * .49), radius = aperture * scale;
     const water = dark ? '#161917' : '#f0f2ed', ink = dark ? '#e3e8dc' : '#29372e';
-    const grid = dark ? '#495349' : '#c5cdbf', muted = dark ? '#a3ae9a' : '#68765f';
+    const grid = dark ? '#3c493f' : '#c5cdbf', muted = dark ? '#a3ae9a' : '#68765f';
     const accent = ({ yellow: '#fffa00', ice: '#7de6ff', amber: '#ffb31f', lime: '#b8ff3d' } as Record<string, string>)[model.accent] || '#fffa00';
-    function project(lon: number, lat: number) {
+    function project(lon: number, lat: number, elevation = 1) {
       const point = projectGlobe(lon, lat, longitude, latitude, GLOBE_TILT);
-      return { x: cx + point.x * radius, y: cy - point.y * radius, z: point.z };
+      return { x: cx + point.x * radius * elevation, y: cy - point.y * radius * elevation, z: point.z };
     }
     // Only the planet is drawn here; no separate viewport or instrument frame.
     context.fillStyle = water; context.strokeStyle = muted; context.lineWidth = .8;
@@ -59,17 +64,69 @@ export function createGlobe(canvas: HTMLCanvasElement, land: number[][], callbac
       }
       context.stroke();
     };
-    for (let lat = -60; lat <= 60; lat += 30) gridLine(Array.from({ length: 121 }, (_, i) => [-180 + i * 3, lat]));
+    for (let lat = -75; lat <= 75; lat += 15) {
+      if (lat !== 0) gridLine(Array.from({ length: 121 }, (_, i) => [-180 + i * 3, lat]));
+    }
     for (let lon = -180; lon < 180; lon += 30) gridLine(Array.from({ length: 61 }, (_, i) => [lon, -90 + i * 3]));
     context.fillStyle = ink;
     for (const { lon, lat, edge } of terrain) {
       const point = project(lon, lat);
       if (point.z <= 0) continue;
-      const size = (.8 + point.z * .65) * Math.max(1, aperture / 120) * Math.min(scale, 1.3);
-      context.globalAlpha = edge ? (dark ? .8 : .72) : (dark ? .4 : .25);
+      const size = (.55 + point.z * .75) * Math.max(1, aperture / 140) * Math.min(scale, 1.3);
+      context.globalAlpha = (edge ? .9 : dark ? .58 : .4) * (.3 + point.z * .7);
       context.fillRect(point.x - size / 2, point.y - size / 2, size, size);
     }
     context.globalAlpha = 1; context.restore();
+    // Physical rim and sparse bearings scale with the globe, never with a fixed aperture.
+    context.strokeStyle = muted; context.lineWidth = .75;
+    for (let i = 0; i < 120; i++) {
+      const angle = i * Math.PI / 60;
+      const outer = radius * (i % 10 === 0 ? 1.045 : 1.025);
+      context.globalAlpha = i % 10 === 0 ? .7 : .3;
+      context.beginPath(); context.moveTo(cx + Math.cos(angle) * radius * 1.014, cy + Math.sin(angle) * radius * 1.014);
+      context.lineTo(cx + Math.cos(angle) * outer, cy + Math.sin(angle) * outer); context.stroke();
+    }
+    context.globalAlpha = .65; context.lineWidth = 2;
+    for (const angle of [-.7, 2.44]) {
+      context.beginPath(); context.arc(cx, cy, radius * 1.055, angle, angle + .6); context.stroke();
+    }
+    context.globalAlpha = 1;
+    for (const pole of [90, -90]) {
+      const point = project(0, pole), dx = point.x - cx, dy = point.y - cy;
+      context.strokeStyle = muted; context.lineWidth = 1;
+      context.beginPath(); context.moveTo(cx + dx * 1.025, cy + dy * 1.025); context.lineTo(cx + dx * 1.14, cy + dy * 1.14); context.stroke();
+      context.fillStyle = ink; context.font = '600 10px Saira, sans-serif'; context.textAlign = 'center';
+      context.fillText(pole > 0 ? 'N' : 'S', cx + dx * 1.18, cy + dy * 1.18 + 3);
+    }
+    if (trafficActive() && traffic.packets.length) {
+      context.save(); context.lineCap = 'round'; context.lineJoin = 'round';
+      for (const { route, started } of traffic.packets) {
+        const points = route.points.map(point => project(...point.coordinates, point.elevation));
+        // Fade the packet smoothly when either endpoint crosses the horizon.
+        const visibility = Math.min(1, Math.max(0, Math.min(points[0].z, points.at(-1)!.z) / .2));
+        if (visibility) {
+          const opacity = visibility * (model.selected === 'all' || route.from === model.selected || route.to === model.selected ? 1 : .3);
+          const sample = (progress: number) => {
+            const index = Math.max(0, Math.min(1, progress)) * (points.length - 1), left = Math.floor(index), right = Math.min(left + 1, points.length - 1), fraction = index - left;
+            return { x: points[left].x + (points[right].x - points[left].x) * fraction, y: points[left].y + (points[right].y - points[left].y) * fraction };
+          };
+          const progress = Math.min(1, (traffic.time - started) / route.duration);
+          const fade = Math.min(1, progress * 12, (1 - progress) * 12);
+          context.strokeStyle = dark ? accent : ink; context.lineWidth = 1.6;
+          for (let tail = 0; tail < 6; tail++) {
+            const from = progress - tail * .012, to = from - .012;
+            if (Math.min(from, to) < 0 || Math.max(from, to) > 1) continue;
+            const a = sample(from), b = sample(to);
+            context.globalAlpha = opacity * fade * (1 - tail / 6) * .8;
+            context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
+          }
+          const head = sample(progress);
+          context.globalAlpha = opacity * fade; context.fillStyle = accent; context.strokeStyle = ink; context.lineWidth = .8;
+          context.beginPath(); context.arc(head.x, head.y, 2.6, 0, Math.PI * 2); context.fill(); context.stroke();
+        }
+      }
+      context.restore();
+    }
     markers = [];
     const labels: { x: number; y: number }[] = [];
     for (const region of model.regions) {
@@ -78,43 +135,66 @@ export function createGlobe(canvas: HTMLCanvasElement, land: number[][], callbac
       markers.push({ x: point.x, y: point.y, code: region.code });
       const selected = model.selected === region.code;
       if (selected) {
-        context.strokeStyle = ink; context.lineWidth = 1;
-        context.strokeRect(point.x - 9, point.y - 9, 18, 18);
+        const arm = 13 + (flight ? 8 * (1 - Math.min(1, flight.elapsed / flight.duration)) : 0);
+        context.strokeStyle = ink; context.lineWidth = 1.2;
+        for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+          context.beginPath(); context.moveTo(point.x + sx * (arm - 5), point.y + sy * arm);
+          context.lineTo(point.x + sx * arm, point.y + sy * arm); context.lineTo(point.x + sx * arm, point.y + sy * (arm - 5)); context.stroke();
+        }
       }
+      context.strokeStyle = muted; context.lineWidth = .7;
+      context.beginPath(); context.arc(point.x, point.y, selected ? 10 : 7, 0, Math.PI * 2); context.stroke();
       context.fillStyle = region.online ? accent : water;
       context.strokeStyle = region.online ? ink : muted;
       context.lineWidth = region.online ? 1.4 : 1;
       if (region.pending === region.total) context.setLineDash([2, 2]);
       const size = selected ? 6 : 4;
       context.beginPath(); context.moveTo(point.x, point.y - size); context.lineTo(point.x + size, point.y); context.lineTo(point.x, point.y + size); context.lineTo(point.x - size, point.y); context.closePath(); context.fill(); context.stroke(); context.setLineDash([]);
-      const side = point.x < cx ? -1 : 1, labelWidth = 43, labelHeight = 15;
-      const x = Math.max(4, Math.min(w - labelWidth - 4, point.x + side * 15 - (side < 0 ? labelWidth : 0)));
-      let y = Math.max(4, Math.min(h - labelHeight - 30, point.y - 19));
+      const side = point.x < cx ? -1 : 1, labelWidth = 64, labelHeight = 24;
+      const x = Math.max(4, Math.min(w - labelWidth - 4, point.x + side * 28 - (side < 0 ? labelWidth : 0)));
+      let y = Math.max(4, Math.min(h - labelHeight - 44, point.y - 32));
       for (let attempt = 0; attempt < 5 && labels.some(label => Math.abs(label.x - x) < labelWidth + 2 && Math.abs(label.y - y) < labelHeight + 3); attempt++) y += labelHeight + 4;
-      y = Math.max(4, Math.min(h - labelHeight - 30, y)); labels.push({ x, y });
+      y = Math.max(4, Math.min(h - labelHeight - 44, y)); labels.push({ x, y });
       context.strokeStyle = selected ? ink : muted; context.lineWidth = .7;
       context.beginPath(); context.moveTo(point.x + side * 6, point.y); context.lineTo(point.x + side * 11, y + labelHeight / 2); context.lineTo(side > 0 ? x : x + labelWidth, y + labelHeight / 2); context.stroke();
-      context.fillStyle = selected ? accent : water; context.fillRect(x, y, labelWidth, labelHeight); context.strokeRect(x, y, labelWidth, labelHeight);
-      context.font = '600 9px Saira, sans-serif'; context.textAlign = 'left'; context.fillStyle = selected ? '#171a18' : ink;
-      context.fillText(region.code + ' ' + region.online + '/' + region.total, x + 4, y + 10.5);
+      context.fillStyle = selected ? accent : water; context.fillRect(x, y, labelWidth, labelHeight);
+      context.strokeRect(x, y, labelWidth, labelHeight);
+      context.fillStyle = region.online ? accent : muted; context.fillRect(x, y, 3, labelHeight);
+      context.font = '650 11px Saira, sans-serif'; context.textAlign = 'left'; context.fillStyle = selected ? '#171a18' : ink;
+      context.fillText(region.code, x + 8, y + 16);
+      context.font = '500 10px Saira, sans-serif'; context.textAlign = 'right';
+      context.fillText(region.online + '/' + region.total, x + labelWidth - 6, y + 16);
     }
+    // Camera telemetry is real view state; it does not imply network routes.
+    context.font = '500 10px Saira, sans-serif'; context.fillStyle = muted; context.textAlign = 'left';
+    context.fillText(`${Math.abs(longitude).toFixed(1)}°${longitude < 0 ? 'W' : 'E'}  /  ${latitude.toFixed(0)}°N`, 8, h - 56);
+    context.textAlign = 'right'; context.fillText(`×${scale.toFixed(2)}`, w - 8, h - 56);
     // Public DOM state also describes the current camera when the canvas is controlled by keyboard.
     canvas.dataset.longitude = longitude.toFixed(2); canvas.dataset.latitude = latitude.toFixed(2); canvas.dataset.zoom = scale.toFixed(2); canvas.dataset.tilt = String(GLOBE_TILT); canvas.dataset.animating = String(!!flight);
+    canvas.dataset.traffic = trafficActive() ? 'on' : 'off';
+    canvas.dataset.trafficInterval = String(traffic.interval);
+    canvas.dataset.trafficConcurrent = String(traffic.concurrent);
   }
   function tick(time: number) {
     frame = 0;
     if (destroyed || !visible || document.hidden) { last = 0; return; }
     const elapsed = last ? Math.max(0, Math.min(time - last, 80)) : 0;
+    const wasMoving = !!flight || running && !drag, hadPacket = traffic.packets.length > 0;
     if (flight) {
       flight.elapsed += elapsed;
       const progress = Math.min(1, flight.elapsed / flight.duration);
       longitude = wrapLongitude(flight.from + flight.delta * (1 - (1 - progress) ** 3));
       if (progress === 1) flight = null;
     } else if (running && !drag) longitude = advanceGlobeLongitude(longitude, elapsed);
-    last = time; draw();
-    if (running || flight) frame = requestAnimationFrame(tick);
+    if (trafficActive()) {
+      const visibleRegions = new Set(model.regions.filter(region => projectGlobe(...region.coordinates, longitude, latitude, GLOBE_TILT).z > .2).map(region => region.code));
+      traffic.advance(elapsed, visibleRegions);
+    }
+    last = time;
+    if (redraw || wasMoving || hadPacket || traffic.packets.length) { draw(); redraw = false; }
+    if (running || flight || trafficActive()) frame = requestAnimationFrame(tick);
   }
-  function wake() { if (!destroyed && visible && !document.hidden && !frame) frame = requestAnimationFrame(tick); }
+  function wake() { redraw = true; if (!destroyed && visible && !document.hidden && !frame) frame = requestAnimationFrame(tick); }
   function focus(coordinates: Coordinates) {
     setRunning(false); last = 0;
     const target = wrapLongitude(coordinates[0]), delta = wrapLongitude(target - longitude);
@@ -164,6 +244,7 @@ export function createGlobe(canvas: HTMLCanvasElement, land: number[][], callbac
   const motion = () => {
     if (reduced.matches) {
       setRunning(false);
+      traffic.reset();
       if (flight) { longitude = wrapLongitude(flight.from + flight.delta); flight = null; }
     }
     callbacks.onReduced(reduced.matches); wake();
@@ -175,7 +256,11 @@ export function createGlobe(canvas: HTMLCanvasElement, land: number[][], callbac
   const intersection = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; if (visible) wake(); else stopFrame(); }); intersection.observe(canvas);
   callbacks.onRunning(running); callbacks.onReduced(reduced.matches); canvas.title = hint; wake();
   return {
-    update(next) { model = next; wake(); }, focus, zoom, reset,
+    update(next) {
+      model = next;
+      traffic.configure({ enabled: !!next.trafficEffects, concurrent: !!next.trafficConcurrent, interval: next.trafficInterval, nodes: next.trafficNodes ?? next.regions });
+      wake();
+    }, focus, zoom, reset,
     toggle() { flight = null; setRunning(!running); last = 0; wake(); },
     destroy() {
       destroyed = true; stopFrame(); resize.disconnect(); intersection.disconnect();

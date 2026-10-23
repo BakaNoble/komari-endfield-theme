@@ -18,6 +18,8 @@ import { usePingMonitor } from './usePingMonitor';
 import { resolveNodeView, type Page, type NodeView, type ViewPreferences } from './viewPreferences';
 import { ListColumn } from './ListColumn';
 import { createPageNavigator, pageFromRoute } from './pageNavigation';
+import { resolveTrafficInterval } from './globeTraffic';
+import { GlobeSettings } from './GlobeSettings';
 
 function readStorage(key: string) { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } }
 function writeStorage(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Storage is optional. */ } }
@@ -36,10 +38,14 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [sort, setSort] = useState('default');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsPage, setSettingsPage] = useState<'appearance' | 'globe'>('appearance');
   const [themePreference, setThemePreference] = useState(() => readStorage('endfield-theme'));
   const [accentPreference, setAccentPreference] = useState(() => readStorage('endfield-accent'));
   const [densityPreference, setDensityPreference] = useState(() => readStorage('endfield-density'));
   const [tiltScopePreference, setTiltScopePreference] = useState(() => readStorage('endfield-tilt-scope'));
+  const [trafficPreference, setTrafficPreference] = useState(() => readStorage('endfield-globe-traffic'));
+  const [trafficIntervalPreference, setTrafficIntervalPreference] = useState(() => readStorage('endfield-globe-traffic-interval'));
+  const [trafficConcurrentPreference, setTrafficConcurrentPreference] = useState(() => readStorage('endfield-globe-traffic-concurrent'));
   const [legacyNodeView, setLegacyNodeView] = useState(() => readStorage('endfield-node-view'));
   const [viewPreferences, setViewPreferences] = useState<ViewPreferences>(() => ({ overview: readStorage('endfield-overview-node-view'), nodes: readStorage('endfield-nodes-node-view'), network: readStorage('endfield-network-node-view') }));
   const [systemDark, setSystemDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches);
@@ -55,6 +61,9 @@ export default function App() {
   const accent = accentPreference || String(settings.accent || 'yellow');
   const compact = (densityPreference || String(settings.density || 'standard')) === 'compact';
   const tiltScope: TiltScope = ['page', '整个页面'].includes(String(tiltScopePreference || settings.tilt_scope)) ? 'page' : 'component';
+  const trafficEffects = !['off', '关闭'].includes(trafficPreference || String(settings.globe_traffic || '开启'));
+  const trafficInterval = resolveTrafficInterval(trafficIntervalPreference || settings.globe_traffic_interval);
+  const trafficConcurrent = ['on', '开启'].includes(trafficConcurrentPreference || String(settings.globe_traffic_concurrent || '关闭'));
   const effectiveGroup = group === 'all' || nodes.some(n => n.group === group) ? group : 'all';
   const effectiveRegion = regionFilter === 'all' || nodes.some(n => regionCode(n.region) === regionFilter) ? regionFilter : 'all';
   const nodeView = resolveNodeView(page, viewPreferences, settings, legacyNodeView);
@@ -132,6 +141,11 @@ export default function App() {
   const title = String(settings.headline || '节点总览');
   const siteName = info.sitename || 'Komari';
   function preference(key: string, value: string, set: (value: string) => void) { writeStorage(`endfield-${key}`, value); set(value); }
+  function openSettings(target: 'appearance' | 'globe') { setSettingsPage(target); setSettingsOpen(true); }
+  function resetGlobeSettings() {
+    ['globe-traffic', 'globe-traffic-interval', 'globe-traffic-concurrent'].forEach(key => { try { localStorage.removeItem(`endfield-${key}`); } catch {} });
+    setTrafficPreference(''); setTrafficIntervalPreference(''); setTrafficConcurrentPreference('');
+  }
   function clearFilters() { setQuery(''); setGroup('all'); setRegionFilter('all'); setStatusFilter('all'); }
   const openNode = (node: NodeInfo) => { location.hash = `/node/${encodeURIComponent(node.uuid)}`; };
   const closeNode = () => { location.hash = `/${page}`; };
@@ -146,7 +160,7 @@ export default function App() {
       ] as const).map(([key, Icon, english, chinese]) => <a href={`#/${key}`} key={key} className={page === key ? 'current' : ''} aria-current={page === key ? 'page' : undefined}><Icon size={15} /><span>{chinese}</span><small>{english}</small></a>)}</nav>
       <div className="header-actions"><span className={`connection ${stale || error ? 'muted' : ''}`}><i />{loading ? '正在连接' : error ? '连接失败' : paused ? '已暂停' : liveError ? '重连中' : isDemo ? '演示模式' : '实时同步'}</span><span className="header-divider" />
         <button className="header-icon" aria-label={dark ? '切换到浅色主题' : '切换到深色主题'} onClick={() => preference('theme', dark ? 'light' : 'dark', setThemePreference)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
-        <button className="header-icon" aria-label="打开外观设置" onClick={() => setSettingsOpen(true)}><Settings2 size={18} /></button>
+        <button className="header-icon" aria-label="打开外观设置" onClick={() => openSettings('appearance')}><Settings2 size={18} /></button>
         <a className="admin-link" href="/admin">管理后台<ArrowUpRight size={14} /></a>
       </div>
     </div></header>
@@ -161,7 +175,7 @@ export default function App() {
       {(error || liveError || paused) && <div className="connection-notice" role="status"><Activity size={17} /><span>{error || (paused ? '已暂停 / 数据未更新' : `${liveError} / 数据未更新`)}</span>{error && info.private_site ? <a className="ef-btn small" href="/admin">前往登录</a> : <button className="ef-btn small" onClick={paused ? () => setPaused(false) : refresh}>{paused ? '继续更新' : '重新连接'}</button>}</div>}
       {page !== 'nodes' && nodes.length > 0 && <section className={`overview ${page === 'network' ? 'network-overview' : ''} ${stale ? 'is-stale' : ''}`} aria-label={page === 'network' ? '网络概览' : '监控概览'}>
         {page === 'overview' ? <ResourceSummary nodes={nodes} statuses={statuses} threshold={threshold} /> : <div className="resource-summary network-summary"><div className="summary-label"><Eyebrow>TRANSFER TOTAL</Eyebrow><span>在线节点累计流量</span></div><div className="transfer-total"><ArrowUp size={17} /><span>累计上传</span><strong>{bytes(sum('totalUp'))}</strong></div><div className="transfer-total"><ArrowDown size={17} /><span>累计下载</span><strong>{bytes(sum('totalDown'))}</strong></div></div>}
-        <div className={`availability ${page === 'network' ? 'has-globe' : ''}`}>{page === 'network' ? <GlobePanel nodes={nodes} statuses={statuses} dark={dark} accent={accent} selected={effectiveRegion} onSelect={setRegionFilter} /> : <StatusRing nodes={nodes} statuses={statuses} threshold={threshold} scope={tiltScope} active={!stale && !loading} />}<div className="ring-legend"><span><i className="normal" />在线 {online.length}</span><span><i className="alert" />离线 {offline.length}</span>{pending > 0 && <span>等待 {pending}</span>}</div><div className="system-status">{stale ? '数据未更新' : loading ? '正在获取节点状态' : !knownOnline ? '等待节点上报' : offline.length || attention.length ? `${offline.length + attention.length} 个节点需要注意` : '所有节点运行正常'}</div></div>
+        <div className={`availability ${page === 'network' ? 'has-globe' : ''}`}>{page === 'network' ? <GlobePanel nodes={nodes} statuses={statuses} dark={dark} accent={accent} selected={effectiveRegion} onSelect={setRegionFilter} trafficEffects={trafficEffects} trafficInterval={trafficInterval} trafficConcurrent={trafficConcurrent} onSettings={() => openSettings('globe')} /> : <StatusRing nodes={nodes} statuses={statuses} threshold={threshold} scope={tiltScope} active={!stale && !loading} />}<div className="ring-legend"><span><i className="normal" />在线 {online.length}</span><span><i className="alert" />离线 {offline.length}</span>{pending > 0 && <span>等待 {pending}</span>}</div><div className="system-status">{stale ? '数据未更新' : loading ? '正在获取节点状态' : !knownOnline ? '等待节点上报' : offline.length || attention.length ? `${offline.length + attention.length} 个节点需要注意` : '所有节点运行正常'}</div></div>
         <div className="bandwidth-summary"><div className="summary-label"><Eyebrow>LIVE BANDWIDTH</Eyebrow><span>实时网络速率</span></div><div className="bandwidth-values"><div><span><ArrowUp size={13} />上传</span><strong>{bytes(sum('up'), true)}</strong></div><div><span><ArrowDown size={13} />下载</span><strong>{bytes(sum('down'), true)}</strong></div></div><Chart compact values={trend} format={v => bytes(v, true)} label={isDemo ? '示例下载速率趋势' : '本次浏览期间的下载速率趋势'} /><div className="chart-caption"><span>下载速率趋势</span><span>{isDemo ? '示例记录' : '本次会话'}</span></div></div>
         <div className="overview-inventory">{page === 'network' ? <><span><Activity size={14} /><b>{ping.tasks.length}</b> 个测试目标</span><span><Network size={14} /><b>{Object.values(ping.health).filter(s => s.tested > 0).length}</b> 台主机有记录</span><span>统计范围 <b>{ping.hours}</b> 小时</span></> : <><span><Cpu size={14} /><b>{nodes.reduce((a, n) => a + n.cpu_cores, 0)}</b> CPU 核心</span><span><MemoryStick size={14} /><b>{bytes(nodes.reduce((a, n) => a + n.mem_total, 0))}</b> 总内存</span><span><HardDrive size={14} /><b>{bytes(nodes.reduce((a, n) => a + n.disk_total, 0))}</b> 总磁盘</span></>}<span className="inventory-note">{groups.length} 个分组 <i>/</i> {nodes.length} 个节点</span></div>
       </section>}
@@ -189,14 +203,16 @@ export default function App() {
       <footer className="site-footer"><div className="footer-brand"><Logo /><strong>{siteName}</strong><span>Powered by Komari Monitor.</span></div><div><span>Endfield Theme / v{themeManifest.version}</span><a href="https://komari-document.pages.dev" target="_blank" rel="noreferrer" aria-label="打开 Komari 文档"><CircleHelp size={14} />文档</a></div></footer>
     </main>
     <Detail node={selected} status={selected ? statuses[selected.uuid] : undefined} onClose={closeNode} demo={isDemo} threshold={threshold} stale={stale} ping={page === 'network' ? ping : undefined} />
-    <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} title="APPEARANCE / 外观设置">
-      <div className="settings-body"><Eyebrow>PERSONAL PREFERENCES</Eyebrow><h2>外观设置</h2>
+    <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} title={settingsPage === 'globe' ? 'GLOBE / 交互地球配置' : 'APPEARANCE / 外观设置'}>
+      <div className="settings-body"><nav className="settings-pages" aria-label="设置分类"><button className="ef-btn" aria-pressed={settingsPage === 'appearance'} onClick={() => setSettingsPage('appearance')}>外观设置</button><button className="ef-btn" aria-pressed={settingsPage === 'globe'} onClick={() => setSettingsPage('globe')}>交互地球</button></nav>
+      {settingsPage === 'globe' ? <GlobeSettings effects={trafficEffects} concurrent={trafficConcurrent} interval={trafficInterval} onEffects={() => preference('globe-traffic', trafficEffects ? 'off' : 'on', setTrafficPreference)} onConcurrent={() => preference('globe-traffic-concurrent', trafficConcurrent ? 'off' : 'on', setTrafficConcurrentPreference)} onInterval={value => preference('globe-traffic-interval', value, setTrafficIntervalPreference)} onReset={resetGlobeSettings} /> : <><Eyebrow>PERSONAL PREFERENCES</Eyebrow><h2>外观设置</h2>
         <label className="setting-row"><span>显示主题</span><select aria-label="显示主题" value={rawTheme} onChange={e => preference('theme', e.target.value, setThemePreference)}><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label>
         <fieldset className="accent-picker"><legend>强调色</legend><div>{[['yellow', '标准黄'], ['ice', '冰蓝'], ['amber', '琥珀'], ['lime', '荧绿']].map(([key, label]) => <button key={key} className={`accent-choice ${key}`} aria-pressed={accent === key} onClick={() => preference('accent', key, setAccentPreference)}><i />{label}</button>)}</div></fieldset>
         <label className="setting-row"><span>列表密度</span><select aria-label="列表密度" value={compact ? 'compact' : 'standard'} onChange={e => preference('density', e.target.value, setDensityPreference)}><option value="standard">标准</option><option value="compact">紧凑</option></select></label>
         {([['overview', '总览主机显示'], ['nodes', '节点主机显示'], ['network', '网络主机显示']] as const).map(([target, label]) => <label className="setting-row" key={target}><span>{label}</span><select aria-label={label} value={resolveNodeView(target, viewPreferences, settings, legacyNodeView)} onChange={e => changeNodeView(e.target.value as NodeView, target)}><option value="list">列表</option><option value="cards">信息卡片</option></select></label>)}
         <label className="setting-row"><span>动效响应范围</span><select aria-label="动效响应范围" value={tiltScope} onChange={e => preference('tilt-scope', e.target.value, setTiltScopePreference)}><option value="component">仅组件</option><option value="page">整个页面</option></select></label>
-        <button className="ef-btn" onClick={() => { ['theme', 'accent', 'density', 'tilt-scope', 'overview-mode', 'node-view', 'overview-node-view', 'nodes-node-view', 'network-node-view'].forEach(k => { try { localStorage.removeItem(`endfield-${k}`); } catch {} }); setThemePreference(''); setAccentPreference(''); setDensityPreference(''); setTiltScopePreference(''); setLegacyNodeView(''); setViewPreferences({ overview: '', nodes: '', network: '' }); }}>恢复站点默认设置</button>
+        <button className="ef-btn" onClick={() => { ['theme', 'accent', 'density', 'tilt-scope', 'overview-mode', 'node-view', 'overview-node-view', 'nodes-node-view', 'network-node-view'].forEach(k => { try { localStorage.removeItem(`endfield-${k}`); } catch {} }); setThemePreference(''); setAccentPreference(''); setDensityPreference(''); setTiltScopePreference(''); resetGlobeSettings(); setLegacyNodeView(''); setViewPreferences({ overview: '', nodes: '', network: '' }); }}>恢复站点默认设置</button>
+      </>}
       </div>
     </Modal>
   </>;

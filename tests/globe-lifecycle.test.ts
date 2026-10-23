@@ -57,8 +57,10 @@ test('planet outline and surface clipping expand and shrink with the same zoom r
     const check = (time: number, scale: number) => {
       env.drawCalls.length = 0; env.step(time);
       const radii = env.drawCalls.filter(call => call.method === 'arc').map(call => call.args[2]);
-      assert.equal(radii.length, 2);
-      for (const radius of radii) assert.ok(Math.abs(radius - base * scale) < .0001, `expected ${base * scale}, got ${radius}`);
+      assert.equal(radii.length, 4);
+      // Surface and clipping share the sphere radius; the two rim arcs follow its zoom.
+      for (const radius of radii.slice(0, 2)) assert.ok(Math.abs(radius - base * scale) < .0001, `expected ${base * scale}, got ${radius}`);
+      for (const radius of radii.slice(2)) assert.ok(Math.abs(radius - base * scale * 1.055) < .0001, 'instrument rim must zoom with the sphere');
     };
     check(100, 1);
     globe.zoom(.8); check(200, 1.8);
@@ -197,5 +199,144 @@ test('manual input interrupts a flight, reduced motion finishes it immediately a
     assert.equal(env.canvas.dataset.animating, 'false'); assert.equal(env.frames.size, 0);
     env.media.matches = false; env.media.fire('change'); globe.focus([139.75, 36.2]); env.step(450);
     assert.equal(env.frames.size, 1); globe.destroy(); assert.equal(env.frames.size, 0);
+  } finally { env.restore(); }
+});
+
+test('traffic packets animate with the globe paused and stop when disabled or hidden', () => {
+  const env = environment();
+  try {
+    const globe = createGlobe(env.canvas as any, [], { onSelect() {}, onRunning() {}, onReduced() {} })!;
+    globe.toggle(); env.step(100); assert.equal(env.frames.size, 0);
+    const model = { regions: [
+      { code: 'HK', coordinates: [114, 22] as const, online: 1, total: 1, pending: 0 },
+      { code: 'JP', coordinates: [138, 36] as const, online: 1, total: 1, pending: 0 },
+    ], selected: 'all', dark: true, accent: 'yellow', trafficEffects: true };
+    globe.update(model); env.drawCalls.length = 0; env.step(200);
+    const packets = env.drawCalls.filter(call => call.method === 'arc' && call.args[2] === 2.6).map(call => call.args.slice(0, 2));
+    assert.equal(packets.length, 1, 'only one transmission is in flight');
+    assert.equal(env.frames.size, 1); assert.equal(env.canvas.dataset.traffic, 'on');
+    env.drawCalls.length = 0; env.step(250);
+    assert.notDeepEqual(env.drawCalls.filter(call => call.method === 'arc' && call.args[2] === 2.6).map(call => call.args.slice(0, 2)), packets);
+    assert.equal(env.canvas.dataset.longitude, '110.00', 'traffic does not rotate a paused globe');
+    env.documentMock.hidden = true; env.documentMock.fire('visibilitychange'); assert.equal(env.frames.size, 0);
+    env.documentMock.hidden = false; env.documentMock.fire('visibilitychange'); env.step(300); assert.equal(env.frames.size, 1);
+    globe.update({ ...model, trafficEffects: false }); env.drawCalls.length = 0; env.step(350);
+    assert.equal(env.frames.size, 0); assert.equal(env.canvas.dataset.traffic, 'off');
+    assert.equal(env.drawCalls.filter(call => call.method === 'arc' && call.args[2] === 2.6).length, 0);
+    globe.destroy(); assert.equal(env.frames.size, 0);
+  } finally { env.restore(); }
+});
+
+test('reduced motion suppresses traffic animation and restores it when the preference changes', () => {
+  const env = environment();
+  try {
+    const globe = createGlobe(env.canvas as any, [], { onSelect() {}, onRunning() {}, onReduced() {} })!;
+    globe.toggle();
+    globe.update({ regions: [
+      { code: 'HK', coordinates: [114, 22], online: 1, total: 1, pending: 0 },
+      { code: 'SG', coordinates: [103, 1], online: 1, total: 1, pending: 0 },
+    ], selected: 'all', dark: false, accent: 'yellow', trafficEffects: true });
+    env.step(100); assert.equal(env.frames.size, 1);
+    env.media.matches = true; env.media.fire('change'); env.step(200);
+    assert.equal(env.frames.size, 0); assert.equal(env.canvas.dataset.traffic, 'off');
+    env.media.matches = false; env.media.fire('change'); env.step(300);
+    assert.equal(env.frames.size, 1); assert.equal(env.canvas.dataset.traffic, 'on');
+    globe.destroy(); assert.equal(env.frames.size, 0);
+  } finally { env.restore(); }
+});
+
+test('traffic sends one packet every six to nine seconds with an idle interval after arrival', () => {
+  const env = environment();
+  try {
+    const globe = createGlobe(env.canvas as any, [], { onSelect() {}, onRunning() {}, onReduced() {} })!;
+    globe.toggle();
+    globe.update({ regions: [
+      { code: 'HK', coordinates: [114, 22], online: 1, total: 1, pending: 0 },
+      { code: 'JP', coordinates: [138, 36], online: 1, total: 1, pending: 0 },
+    ], selected: 'all', dark: true, accent: 'yellow', trafficEffects: true });
+    let inFlight = false, idle = false;
+    const departures: number[] = [];
+    for (let time = 100; time <= 10100; time += 50) {
+      env.drawCalls.length = 0; env.step(time);
+      const count = env.drawCalls.filter(call => call.method === 'arc' && call.args[2] === 2.6).length;
+      assert.ok(count <= 1);
+      if (count && !inFlight) departures.push(time);
+      if (!count && departures.length === 1) idle = true;
+      inFlight = !!count;
+    }
+    assert.equal(departures.length, 2);
+    assert.ok(departures[1] - departures[0] >= 6000 && departures[1] - departures[0] <= 9050);
+    assert.ok(idle, 'packet vanishes on arrival before another one is sent');
+    globe.destroy(); assert.equal(env.frames.size, 0);
+  } finally { env.restore(); }
+});
+
+test('changing the traffic interval reschedules the next transmission without interrupting a packet', () => {
+  const env = environment();
+  try {
+    const globe = createGlobe(env.canvas as any, [], { onSelect() {}, onRunning() {}, onReduced() {} })!;
+    globe.toggle();
+    const model = { regions: [
+      { code: 'HK', coordinates: [114, 22] as const, online: 1, total: 1, pending: 0 },
+      { code: 'JP', coordinates: [138, 36] as const, online: 1, total: 1, pending: 0 },
+    ], selected: 'all', dark: true, accent: 'yellow', trafficEffects: true, trafficInterval: 30 };
+    globe.update(model); env.step(100);
+    for (let time = 150; time <= 1100; time += 50) env.step(time);
+    globe.update({ ...model, trafficInterval: 2 }); env.drawCalls.length = 0; env.step(1150);
+    assert.equal(env.canvas.dataset.trafficInterval, '2');
+    assert.equal(env.drawCalls.filter(call => call.method === 'arc' && call.args[2] === 2.6).length, 1, 'current packet keeps flying');
+    let nextPacket = false;
+    for (let time = 1200; time <= 5300; time += 50) {
+      env.drawCalls.length = 0; env.step(time);
+      const count = env.drawCalls.filter(call => call.method === 'arc' && call.args[2] === 2.6).length;
+      // The initial HK–JP packet finishes before four seconds; any packet
+      // visible after that must have used the updated schedule.
+      if (time >= 4000 && count) { nextPacket = true; break; }
+    }
+    assert.ok(nextPacket, 'new interval takes effect without waiting for the old thirty-second schedule');
+    globe.destroy();
+  } finally { env.restore(); }
+});
+
+test('short traffic intervals still allow at most one packet and use the configured timing', () => {
+  const env = environment();
+  try {
+    const globe = createGlobe(env.canvas as any, [], { onSelect() {}, onRunning() {}, onReduced() {} })!;
+    globe.toggle();
+    globe.update({ regions: [
+      { code: 'HK', coordinates: [114, 22], online: 1, total: 1, pending: 0 },
+      { code: 'JP', coordinates: [138, 36], online: 1, total: 1, pending: 0 },
+    ], selected: 'all', dark: true, accent: 'yellow', trafficEffects: true, trafficInterval: 2 });
+    let inFlight = false;
+    const departures: number[] = [];
+    for (let time = 100; time <= 10300; time += 50) {
+      env.drawCalls.length = 0; env.step(time);
+      const count = env.drawCalls.filter(call => call.method === 'arc' && call.args[2] === 2.6).length;
+      assert.ok(count <= 1);
+      if (count && !inFlight) departures.push(time);
+      inFlight = !!count;
+    }
+    assert.ok(departures.length >= 3);
+    departures.slice(1).forEach((departure, i) => assert.ok(departure - departures[i] >= 2000 && departure - departures[i] <= 5050));
+    globe.destroy();
+  } finally { env.restore(); }
+});
+
+test('concurrent packets render together and still stop for reduced motion and unmount', () => {
+  const env = environment();
+  try {
+    const globe = createGlobe(env.canvas as any, [], { onSelect() {}, onRunning() {}, onReduced() {} })!;
+    globe.toggle();
+    globe.update({ regions: [
+      { code: 'HK', coordinates: [114, 22], online: 1, total: 1, pending: 0 },
+      { code: 'JP', coordinates: [138, 36], online: 1, total: 1, pending: 0 },
+      { code: 'SG', coordinates: [103, 1], online: 1, total: 1, pending: 0 },
+    ], selected: 'all', dark: true, accent: 'yellow', trafficEffects: true, trafficConcurrent: true });
+    for (let time = 100; time <= 3200; time += 50) { env.drawCalls.length = 0; env.step(time); }
+    assert.equal(env.drawCalls.filter(call => call.method === 'arc' && call.args[2] === 2.6).length, 3);
+    assert.equal(env.canvas.dataset.trafficConcurrent, 'true');
+    env.media.matches = true; env.media.fire('change'); env.step(3250);
+    assert.equal(env.frames.size, 0); assert.equal(env.canvas.dataset.traffic, 'off');
+    globe.destroy(); assert.equal(env.frames.size, 0);
   } finally { env.restore(); }
 });

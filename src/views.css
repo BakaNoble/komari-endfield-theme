@@ -35,7 +35,7 @@
 .globe-online small { font-size: 14px; color: var(--console-muted); font-weight: 500; margin-left: 3px; }
 .globe-workspace { display: block; padding: 0; }
 .globe-instrument { position: relative; min-width: 0; }
-.globe-stage { height: clamp(480px, 52vw, 780px); position: relative; overflow: hidden; background: none; }
+.globe-stage { height: clamp(480px, 52vw, 780px); position: relative; overflow: hidden; background: radial-gradient(circle, var(--surface-dots) .65px, transparent .85px) center / 12px 12px; }
 .globe-stage canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
 .globe-stage canvas:active { cursor: grabbing; }
 .globe-stage canvas:focus-visible { outline-offset: -3px; }
@@ -49,7 +49,7 @@
 .globe-controls button:disabled { cursor: default; }
 .globe-control-spacer { flex: 1; }
 .globe-index { border: 0; margin-top: 12px; padding: 0; min-width: 0; }
-.globe-index-heading { display: flex; align-items: center; gap: 5px; justify-content: space-between; min-height: 28px; padding: 0; margin-bottom: 8px; border: 0; font-size: 10px; }
+.globe-index-heading { display: flex; align-items: center; gap: 5px; justify-content: space-between; min-height: 28px; padding: 0 0 7px; margin-bottom: 8px; border-bottom: 1px solid var(--console-rule); font-size: 10px; }
 .globe-index-heading b { font-size: 11px; margin-left: 4px; }
 .globe-index-heading button { font-size: 9px; padding: 3px 6px; border: 1px solid var(--console-rule); min-height: 27px; }
 .globe-index-heading button[aria-pressed='true'] { background: var(--ef-signal); color: #171a18; border-color: transparent; }
