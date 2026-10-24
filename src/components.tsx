@@ -127,7 +127,7 @@ export function ResourceSummary({ nodes, statuses, threshold }: { nodes: NodeInf
   const memory = percent(memNodes.reduce((a, n) => a + statuses[n.uuid].ram!, 0), memNodes.reduce((a, n) => a + n.mem_total, 0));
   return <div className="resource-summary">
     <div className="summary-label"><Eyebrow>RESOURCE USAGE</Eyebrow><span>资源使用率</span></div>
-    {[['CPU', cpu], ['MEMORY', memory]] .map(([label, value]) => <div className="summary-resource" key={String(label)}>
+    {[['CPU', cpu], ['内存', memory]] .map(([label, value]) => <div className="summary-resource" key={String(label)}>
       <div><span className="ef-field">{label}</span></div>
       <strong>{value == null ? '—' : Number(value).toFixed(1)}{value != null && <small>%</small>}</strong><Meter value={value as number | null} threshold={threshold} segments />
     </div>)}

@@ -1,0 +1,90 @@
+/* Shared reading hierarchy across overview, inventory, diagnostics and dialogs.
+   Instrument SVG labels use their own viewBox scale, not CSS text-size tokens. */
+body.ef { line-height: 1.6; }
+button, input, select { font-variant-numeric: tabular-nums; }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+input::placeholder { opacity: 1; }
+:is(input,select):focus-visible { outline: 2px solid var(--ef-ink); outline-offset: 3px; }
+::selection { background: var(--ef-signal); color: #171a18; }
+
+/* A single surface family; row emphasis comes from structure, not extra hues. */
+:root {
+  --list-surface: var(--ef-panel);
+  --list-identity: var(--console-panel);
+  --list-line: var(--ef-rule);
+  --list-hover: color-mix(in srgb,var(--ef-panel) 65%,var(--ef-chip));
+}
+html[data-theme='dark'] {
+  --list-surface: var(--ef-panel);
+  --list-identity: var(--console-panel);
+  --list-line: var(--ef-rule);
+  --list-hover: color-mix(in srgb,var(--ef-panel) 65%,var(--ef-chip));
+}
+.list-columns { background: var(--table-header); min-height: 60px; }
+.overview > :is(.resource-summary,.bandwidth-summary)::after { border: 0; }
+.summary-label { border-bottom-width: 1px; }
+.node-card:not(button) { clip-path: none; }
+.node-card:not(button)::after { display: none; }
+.node-card.node-offline .card-resources, .chart-empty { opacity: 1; }
+.state-badge { line-height: 1.5; }
+:is(.node-row,.inventory-row,.multi-ping-row) .state-badge { font-size: var(--type-micro); }
+
+/* Small labels remain secondary through weight and spacing, never tiny text. */
+.ef-eyebrow { line-height: 1.5; }
+:root :is(.command-bar nav a small, .ef-chip .n, .globe-region-name > small,
+.globe-regions b > small) { opacity: 1; }
+.brand small { font-size: 10px; letter-spacing: 1.5px; }
+.node-spec, .detail-specs { line-height: 1.65; flex-wrap: wrap; }
+.card-title > strong { line-height: 1.5; }
+.card-title > span { line-height: 1.6; }
+.public-remark { font-size: 14px; max-width: 72ch; }
+.setting-row { font-size: 14px; }
+.setting-row small { font-size: var(--type-label); line-height: 1.65; }
+.settings-body { background: none; }
+.detail-facts dt, .detail-facts dd { font-size: var(--type-control); }
+.status-ring .ring-label > .eyebrow, .ring-runtime { font-size: max(11px,2.2cqw); }
+.status-ring .ring-caption { font-size: max(12px,3cqw); letter-spacing: .1em; }
+/* Thin warning traces need more contrast than a yellow button's solid fill. */
+:root { --warning-trace: #746318; }
+html[data-theme='dark'] { --warning-trace: var(--ef-signal); }
+.ring-segment.warn, .ring-reading.warn { stroke: var(--warning-trace); }
+.meter.high > span { background: var(--warning-trace); }
+
+/* Keep chart names and numeric readouts readable at narrow panel widths. */
+.traffic-scale { flex-basis: 65px; }
+.traffic-chart-footer, .traffic-panel-heading { flex-wrap: wrap; }
+.traffic-rank-host { font-size: var(--type-label); }
+.traffic-rank-row { min-height: 60px; }
+.traffic-rank-legend { flex-wrap: wrap; gap: 6px 12px; }
+.ping-comparison-scale { width: 35px; }
+.ping-comparison-legend > button { grid-template-columns: 20px minmax(0,1fr); }
+.ping-comparison-legend strong { grid-column: 2; }
+.ping-comparison-legend > button > span { white-space: normal; overflow-wrap: anywhere; }
+.ping-comparison-legend > button:focus-visible { outline: 2px solid var(--ef-ink); }
+.globe-regions { grid-template-columns: repeat(auto-fit,minmax(124px,1fr)); max-height: 160px; }
+
+@media (max-width: 1100px) {
+  .list-toolbar, .section-heading, .directory-controls { flex-wrap: wrap; }
+  .list-tools { flex-wrap: wrap; }
+}
+@media (max-width: 600px) {
+  .brand small { font-size: 9px; }
+  .summary-label .ef-eyebrow { white-space: normal; letter-spacing: .08em; }
+  .detail-metrics { grid-template-columns: 1fr; }
+  .detail-metrics > section { padding: 18px; }
+  .setting-row { flex-wrap: wrap; gap: 12px; }
+  .setting-row > select, .traffic-frequency { max-width: 100%; }
+  .traffic-panel-heading h3 { font-size: 14px; }
+  .traffic-rank-host { font-size: var(--type-label); }
+  .globe-heading h3 > small { display: block; margin-left: 0; }
+  .overview-inventory { line-height: 1.7; }
+}
+@media (pointer: coarse) {
+  :root :is(.header-icon,.icon-btn,.globe-controls button,.globe-index-heading button,
+    .ef-chip,.text-button,.list-status > button,.view-switch button,.chart-tabs > button,
+    .ping-comparison-legend > button,.accent-choice,.ef-btn) { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

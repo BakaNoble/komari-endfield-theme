@@ -1,6 +1,7 @@
 import { normalizeHistory, normalizeNodes, normalizeStatuses } from './model.ts';
 import type { PublicInfo } from './model';
 import { normalizePingTasks, normalizePingReport, normalizePingMetrics } from './ping.ts';
+import { normalizeTrafficReport, trafficMetricKeys } from './traffic.ts';
 
 export class ApiError extends Error {
   code: number;
@@ -35,6 +36,16 @@ export async function history(uuid: string, hours: number, signal?: AbortSignal)
     if (!unsupported(e)) throw e;
     return normalizeHistory((await request(`/api/records/load?uuid=${encodeURIComponent(uuid)}&hours=${hours}&load_type=all`, { signal })).data);
   }
+}
+export async function trafficReport(nodeIds: string[], signal?: AbortSignal, end = Date.now()) {
+  const start = end - 24 * 3600000;
+  const result = await rpc('public:queryMetrics', {
+    metric_keys: trafficMetricKeys, entity_ids: [...new Set(nodeIds)],
+    start: new Date(start).toISOString(), end: new Date(end).toISOString(),
+    max_points: 120, aggregation: 'p95', fill_empty: true,
+    aggregation_by_metric: { 'traffic.up': 'sum', 'traffic.down': 'sum', 'net.total.up': 'last', 'net.total.down': 'last' },
+  }, signal);
+  return normalizeTrafficReport(result, start, end);
 }
 export async function pingTasks(signal?: AbortSignal) {
   try { return normalizePingTasks(await rpc('public:getPublicPingTasks', {}, signal)); }

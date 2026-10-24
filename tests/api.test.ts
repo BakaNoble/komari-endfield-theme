@@ -1,8 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nodes, history, pingTasks, pingReport, pingReports, LiveSource, ApiError } from '../src/api.ts';
+import { nodes, history, pingTasks, pingReport, pingReports, trafficReport, LiveSource, ApiError } from '../src/api.ts';
 const originalFetch = globalThis.fetch;
 const respond = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+
+test('24h traffic requests one bounded multi-host metric query with byte sums and last counter baselines', async () => {
+  let calls = 0;
+  const end = Date.parse('2026-10-23T12:00:00Z');
+  globalThis.fetch = (async (path, options) => {
+    calls++; assert.equal(path, '/api/rpc2');
+    const body = JSON.parse(String(options?.body)), params = body.params;
+    assert.equal(body.method, 'public:queryMetrics');
+    assert.deepEqual(params.entity_ids, ['a', 'b']); assert.equal(params.max_points, 120);
+    assert.equal(Date.parse(params.end) - Date.parse(params.start), 86400000);
+    assert.equal(params.aggregation_by_metric['traffic.up'], 'sum');
+    assert.equal(params.aggregation_by_metric['traffic.down'], 'sum');
+    assert.equal(params.aggregation_by_metric['net.total.up'], 'last');
+    assert.equal(params.fill_empty, true);
+    return respond({ result: { start: params.start, end: params.end, series: [] } });
+  }) as typeof fetch;
+  try { const result = await trafficReport(['a', 'b', 'a'], undefined, end); assert.equal(result.end, end); assert.equal(calls, 1); }
+  finally { globalThis.fetch = originalFetch; }
+});
+
+test('unsupported, unauthorized and malformed traffic responses do not fall back to made-up consumption', async () => {
+  try {
+    for (const code of [-32601, -32040]) {
+      let calls = 0; globalThis.fetch = (async () => { calls++; return respond({ error: { code, message: 'unavailable' } }); }) as typeof fetch;
+      await assert.rejects(trafficReport(['a']), (e: unknown) => e instanceof ApiError && e.code === code);
+      assert.equal(calls, 1);
+    }
+    globalThis.fetch = (async () => respond({ result: { records: [] } })) as typeof fetch;
+    await assert.rejects(trafficReport(['a']), /无效/);
+  } finally { globalThis.fetch = originalFetch; }
+});
 
 test('malformed JSON envelopes produce a controlled API error without fallback', async () => {
   try {

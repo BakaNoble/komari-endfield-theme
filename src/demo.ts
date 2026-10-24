@@ -1,5 +1,6 @@
 import type { HistoryRecord, NodeInfo, NodeStatus } from './model';
 import type { PingReport, PingTask } from './ping';
+import { normalizeTrafficReport, trafficMetricKeys } from './traffic.ts';
 const GiB = 1024 ** 3;
 export const demoPingTasks: PingTask[] = [
   { id: 1, name: 'Cloudflare DNS', type: 'ICMP', interval: 60, clients: [1, 2, 3, 4, 5, 6].map(i => `demo-node-${i}`), weight: 0 },
@@ -52,4 +53,22 @@ export function demoHistory(uuid: string, hours: number): HistoryRecord[] {
     net_in: Math.max(0, samples[i][11] * 1024 ** 2 * (.7 + Math.sin(t * .22) * .3)),
     net_out: Math.max(0, samples[i][10] * 1024 ** 2 * (.7 + Math.cos(t * .2) * .3)),
   }));
+}
+export function demoTrafficReport(end = Date.now()) {
+  const start = end - 24 * 3600000, step = 15 * 60000;
+  const series = demoNodes.flatMap((node, i) => {
+    let up = (i + 1) * GiB, down = (i + 1) * 4 * GiB;
+    const rows = Array.from({ length: 97 }, (_, t) => {
+      const wave = .7 + Math.sin(t * .11 + i) * .2 + Math.sin(t * .43 + i) * .1;
+      const upRate = (samples[i][10] || .18) * 1024 ** 2 * .12 * wave;
+      const downRate = (samples[i][11] || .6) * 1024 ** 2 * .12 * wave;
+      const upDelta = t ? upRate * step / 1000 : 0, downDelta = t ? downRate * step / 1000 : 0;
+      const missing = i === 5 && t > 88;
+      if (!missing) { up += upDelta; down += downDelta; }
+      return { time: new Date(start + t * step).toISOString(), values: [downRate, upRate, up, down, upDelta, downDelta], missing };
+    });
+    return trafficMetricKeys.map((metric_key, metric) => ({ metric_key, entity_id: node.uuid,
+      points: rows.map(row => ({ time: row.time, value: row.missing ? null : row.values[metric] })) }));
+  });
+  return normalizeTrafficReport({ start: new Date(start).toISOString(), end: new Date(end).toISOString(), series }, start, end);
 }
